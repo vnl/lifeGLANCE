@@ -36,9 +36,7 @@ export default function HelpModal({ onClose }) {
 
         {/* ── Header ──────────────────────────────────────────────────────── */}
         <div className="sheet-header">
-          <span className="sheet-title">
-            <span className="help-sheet-icon">?</span> help
-          </span>
+          <span className="sheet-title">help</span>
           <button className="sheet-close" onClick={onClose}>✕</button>
         </div>
 

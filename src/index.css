@@ -890,20 +890,6 @@ button, input, select, textarea {
 /* ─── Help modal ───────────────────────────────────────────────────────────── */
 .help-sheet { max-width: 420px; }
 
-.help-sheet-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.3em;
-  height: 1.3em;
-  border: 1.5px solid var(--amber);
-  border-radius: 50%;
-  font-size: 0.75rem;
-  line-height: 1;
-  margin-right: 0.35rem;
-  color: var(--amber);
-}
-
 .help-shortcuts-table {
   width: 100%;
   border-collapse: collapse;
