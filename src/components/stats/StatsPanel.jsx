@@ -1,4 +1,4 @@
-import React, { useRef } from 'react'
+import React, { useRef, useState } from 'react'
 import { formatDateDisplay } from '../../utils/dates'
 import TypewriterText from '../ui/TypewriterText'
 import AnimatedRelLabel from '../ui/AnimatedRelLabel'
@@ -6,6 +6,12 @@ import AnimatedRelLabel from '../ui/AnimatedRelLabel'
 function StatMilestone({ m, align }) {
   const dateStr = formatDateDisplay(m.date, m.date_precision)
   const k = m.id + (m.updated_at || '')
+
+  // Only show the animated label after the date typewriter finishes.
+  // Tracking the key (not a boolean) means it resets instantly when the
+  // milestone changes — no stale flash between navigations.
+  const [readyForKey, setReadyForKey] = useState(null)
+  const labelReady = readyForKey === k
 
   return (
     <div className={`stat-milestone ${align === 'right' ? 'stat-milestone-right' : ''}`}>
@@ -15,10 +21,11 @@ function StatMilestone({ m, align }) {
       </div>
       <div className="stat-milestone-date">
         <TypewriterText key={k + 'date'} text={dateStr}
-          options={{ delay: 14, jitter: 6, startDelay: 180 }} showCursor={false} />
+          options={{ delay: 14, jitter: 6, startDelay: 180 }} showCursor={false}
+          onDone={() => setReadyForKey(k)} />
       </div>
       <div className="stat-milestone-rel">
-        <AnimatedRelLabel dateStr={m.date} />
+        {labelReady && <AnimatedRelLabel key={k} dateStr={m.date} />}
       </div>
     </div>
   )

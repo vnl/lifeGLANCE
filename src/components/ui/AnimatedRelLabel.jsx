@@ -1,41 +1,17 @@
-import React, { useRef, useEffect, useState } from 'react'
+import React from 'react'
+import { useCountUp } from '../../utils/typewriter'
 import { getYearsMonths } from '../../utils/dates'
 
-const DUR = 420 // ms for count-up animation
-
 /**
- * Animates a single integer from its previous value to `value`
- * using a rAF ease-out-cubic loop.  On first mount it counts from 0.
+ * Renders the relative-time label for a milestone with numbers that
+ * count up from 0 when the component mounts.
+ * Mirrors the format logic of relativeLabel() exactly.
  */
 function AnimatedNumber({ value }) {
-  const [disp,    setDisp]  = useState(0)
-  const prevRef  = useRef(null)
-  const rafRef   = useRef(null)
-
-  useEffect(() => {
-    const from = prevRef.current === null ? 0 : prevRef.current
-    prevRef.current = value
-    if (rafRef.current) cancelAnimationFrame(rafRef.current)
-    if (from === value) { setDisp(value); return }
-
-    const t0 = performance.now()
-    const tick = (ts) => {
-      const p = Math.min((ts - t0) / DUR, 1)
-      const e = 1 - (1 - p) ** 3          // ease-out cubic
-      setDisp(Math.round(from + (value - from) * e))
-      if (p < 1) rafRef.current = requestAnimationFrame(tick)
-    }
-    rafRef.current = requestAnimationFrame(tick)
-    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current) }
-  }, [value])
-
+  const disp = useCountUp(value, { duration: 420, active: true })
   return <>{disp}</>
 }
 
-/**
- * Renders the relative-time label for a milestone date with animated numbers.
- * Mirrors the logic of relativeLabel() so format matches exactly.
- */
 export default function AnimatedRelLabel({ dateStr }) {
   const { years, months, days, past } = getYearsMonths(dateStr)
 
