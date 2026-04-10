@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback, useEffect } from 'react'
 import Timeline          from './Timeline'
 import StatsPanel        from '../stats/StatsPanel'
 import AddMilestoneSheet from '../milestone/AddMilestoneSheet'
@@ -8,13 +8,29 @@ import { addMilestone, updateMilestone, deleteMilestone } from '../../data/miles
 
 const ZOOM_RANK = { decades: 4, years: 3, months: 2, weeks: 1 }
 
+const TEXT_SIZES = {
+  small:  '13px',
+  normal: '16px',
+  big:    '19px',
+  bigger: '22px',
+}
+
 export default function TimelineView({ milestones, setMilestones }) {
   const [zoom,        setZoom]      = useState('years')
   const [zoomAnim,    setZoomAnim]  = useState('')
   const [addOpen,     setAddOpen]   = useState(false)
   const [editTarget,  setEditTarget] = useState(null)
   const [detail,      setDetail]    = useState(null)
+  const [textSize,    setTextSize]  = useState(
+    () => localStorage.getItem('lifeglance-text-size') || 'normal'
+  )
   const timelineRef = useRef(null)
+
+  // Apply font size to root whenever it changes
+  useEffect(() => {
+    document.documentElement.style.fontSize = TEXT_SIZES[textSize]
+    localStorage.setItem('lifeglance-text-size', textSize)
+  }, [textSize])
 
   // ── Zoom ─────────────────────────────────────────────────────────────────────
   const handleZoom = useCallback((newZoom) => {
@@ -64,16 +80,33 @@ export default function TimelineView({ milestones, setMilestones }) {
           <span className="logo-glance">GLANCE</span>
         </div>
 
-        <div className="zoom-tabs">
-          {ZOOM_LEVELS.map(z => (
-            <button
-              key={z}
-              className={`zoom-tab ${zoom === z ? 'active' : ''}`}
-              onClick={() => handleZoom(z)}
-            >
-              {z}
-            </button>
-          ))}
+        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          {/* Text size controls */}
+          <div className="zoom-tabs">
+            {Object.keys(TEXT_SIZES).map(s => (
+              <button
+                key={s}
+                className={`zoom-tab ${textSize === s ? 'active' : ''}`}
+                onClick={() => setTextSize(s)}
+                title={`Text size: ${s}`}
+              >
+                {s}
+              </button>
+            ))}
+          </div>
+
+          {/* Zoom level controls */}
+          <div className="zoom-tabs">
+            {ZOOM_LEVELS.map(z => (
+              <button
+                key={z}
+                className={`zoom-tab ${zoom === z ? 'active' : ''}`}
+                onClick={() => handleZoom(z)}
+              >
+                {z}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
