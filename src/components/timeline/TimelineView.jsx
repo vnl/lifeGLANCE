@@ -235,6 +235,16 @@ export default function TimelineView({ milestones, setMilestones }) {
           if (!s.settingsOpen) setSettingsOpen(true)
           break
         }
+        case 'c': case 'C': {
+          if (anyModal) break
+          if (s.zoom === 'custom') {
+            customInputRef.current?.focus()
+          } else {
+            handleZoomRef.current('custom')
+            // autoFocus fires when the input mounts
+          }
+          break
+        }
         case 'p': case 'P': {
           if (anyModal) break
           s.handleViewMode('past')
