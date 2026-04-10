@@ -281,25 +281,23 @@ export default function TimelineView({ milestones, setMilestones }) {
     <div className="timeline-view">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="timeline-header">
+        {/* Left: logo */}
         <div className="logo logo-sm">
           <span className="logo-life">life</span>
           <span className="logo-glance">GLANCE</span>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.25rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-            <div className="zoom-tabs">
-              {ZOOM_LEVELS.map(z => (
-                <button key={z}
-                  className={`zoom-tab ${zoom === z ? 'active' : ''}`}
-                  onClick={() => handleZoom(z)}>{z}</button>
-              ))}
-              <button
-                className={`zoom-tab ${zoom === 'custom' ? 'active' : ''}`}
-                onClick={() => handleZoom('custom')}>custom</button>
-            </div>
-
-            <button className="action-link" onClick={() => setSettingsOpen(true)}>settings</button>
+        {/* Center: zoom picker + indicator */}
+        <div className="header-center">
+          <div className="zoom-tabs">
+            {ZOOM_LEVELS.map(z => (
+              <button key={z}
+                className={`zoom-tab ${zoom === z ? 'active' : ''}`}
+                onClick={() => handleZoom(z)}>{z}</button>
+            ))}
+            <button
+              className={`zoom-tab ${zoom === 'custom' ? 'active' : ''}`}
+              onClick={() => handleZoom('custom')}>custom</button>
           </div>
 
           <div className="zoom-indicator">
@@ -319,6 +317,11 @@ export default function TimelineView({ milestones, setMilestones }) {
                 options={{ delay: 38, jitter: 18 }} showCursor={false} hideCursorWhenDone />
             )}
           </div>
+        </div>
+
+        {/* Right: settings */}
+        <div className="header-right">
+          <button className="action-link" onClick={() => setSettingsOpen(true)}>settings</button>
         </div>
       </div>
 
