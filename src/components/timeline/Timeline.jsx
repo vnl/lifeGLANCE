@@ -63,23 +63,29 @@ const Timeline = forwardRef(function Timeline(
 
   useEffect(() => { panMsRef.current = panMs }, [panMs])
 
-  // Smooth pan-to-today via ease-out cubic rAF loop
+  // Shared smooth-pan helper: animate panMs from current to targetPan
+  const smoothPanTo = useCallback((targetPan) => {
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    const start = panMsRef.current
+    const delta = targetPan - start
+    if (Math.abs(delta) < 500) { setPanMs(targetPan); return }
+    const t0 = performance.now()
+    const dur = 480
+    function tick(now) {
+      const p = Math.min((now - t0) / dur, 1)
+      const eased = 1 - Math.pow(1 - p, 3)
+      setPanMs(start + delta * eased)
+      if (p < 1) animRef.current = requestAnimationFrame(tick)
+    }
+    animRef.current = requestAnimationFrame(tick)
+  }, [])
+
+  // Expose imperative methods to parent
   useImperativeHandle(ref, () => ({
-    resetPan: () => {
-      if (animRef.current) cancelAnimationFrame(animRef.current)
-      const start = panMsRef.current
-      if (Math.abs(start) < 500) { setPanMs(0); return }
-      const t0 = performance.now()
-      const dur = 480
-      function tick(now) {
-        const p = Math.min((now - t0) / dur, 1)
-        const eased = 1 - Math.pow(1 - p, 3)
-        setPanMs(start * (1 - eased))
-        if (p < 1) animRef.current = requestAnimationFrame(tick)
-      }
-      animRef.current = requestAnimationFrame(tick)
-    },
-  }), [])
+    resetPan: () => smoothPanTo(0),
+    // Center the timeline on any UTC timestamp (ms)
+    panToMs: (targetMs) => smoothPanTo(targetMs - Date.now()),
+  }), [smoothPanTo])
 
   // Measure container
   useEffect(() => {

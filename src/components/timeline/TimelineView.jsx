@@ -32,6 +32,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   const [customYears, setCustomYears] = useState(15)
   const [pastIdx,     setPastIdx]    = useState(0)
   const [futureIdx,   setFutureIdx]  = useState(0)
+  const [selectedId,  setSelectedId] = useState(null)
 
   const timelineRef = useRef(null)
   const zoomWrapRef = useRef(null)
@@ -101,8 +102,18 @@ export default function TimelineView({ milestones, setMilestones }) {
   }, [future.length])
 
   const highlightedIds = new Set(
-    [past[pastIdx]?.id, future[futureIdx]?.id].filter(Boolean)
+    [past[pastIdx]?.id, future[futureIdx]?.id, selectedId].filter(Boolean)
   )
+
+  // ── Milestone click: first click selects + centers, second click opens detail ─
+  function handleMilestoneClick(m) {
+    if (selectedId === m.id) {
+      setDetail(m)
+    } else {
+      setSelectedId(m.id)
+      timelineRef.current?.panToMs(new Date(m.date).getTime())
+    }
+  }
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   async function handleSave(data, existing) {
@@ -223,8 +234,18 @@ export default function TimelineView({ milestones, setMilestones }) {
           <StatsPanel
             past={past} future={future}
             pastIdx={pastIdx} futureIdx={futureIdx}
-            onPastChange={i => setPastIdx(Math.max(0, Math.min(i, past.length - 1)))}
-            onFutureChange={i => setFutureIdx(Math.max(0, Math.min(i, future.length - 1)))}
+            onPastChange={i => {
+              const clamped = Math.max(0, Math.min(i, past.length - 1))
+              setPastIdx(clamped)
+              const m = past[clamped]
+              if (m) timelineRef.current?.panToMs(new Date(m.date).getTime())
+            }}
+            onFutureChange={i => {
+              const clamped = Math.max(0, Math.min(i, future.length - 1))
+              setFutureIdx(clamped)
+              const m = future[clamped]
+              if (m) timelineRef.current?.panToMs(new Date(m.date).getTime())
+            }}
           />
         )}
 
@@ -236,7 +257,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             textSize={textSize}
             customHalfMs={customYears * 365.25 * 24 * 3600 * 1000}
             highlightedIds={highlightedIds}
-            onMilestoneClick={setDetail}
+            onMilestoneClick={handleMilestoneClick}
           />
         </div>
 
