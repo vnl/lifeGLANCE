@@ -34,7 +34,7 @@ function wrapTitle(text, maxChars) {
 }
 
 const Timeline = forwardRef(function Timeline(
-  { milestones, zoom, textSize = 'normal', onMilestoneClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all' },
+  { milestones, zoom, textSize = 'normal', onMilestoneClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick },
   ref
 ) {
   const remPx = REM_PX[textSize] || 22
@@ -111,7 +111,31 @@ const Timeline = forwardRef(function Timeline(
   const todayX   = dateToX(today.getTime(), startMs, endMs, w)
   const msPerPx  = getMsPerPx(zoom, w, customHalfMs)
   const maxLane  = Math.max(0, Math.floor((axisY - MAX_CONN - CARD_H2 - 16) / CARD_STEP))
-  const withLanes = assignLanes(milestones, maxLane, msPerPx * CARD_W)
+
+  // ── Auto-density clustering ──────────────────────────────────────────────────
+  // Milestones whose axis dots fall within CLUSTER_THRESHOLD px of each other
+  // are collapsed into a badge instead of rendering as overlapping cards.
+  const CLUSTER_THRESHOLD = CARD_W * 0.4
+
+  const sorted = [...milestones].sort((a, b) => new Date(a.date) - new Date(b.date))
+  const groups = []
+  let gi = 0
+  while (gi < sorted.length) {
+    const group  = [sorted[gi]]
+    const groupX = dateToX(new Date(sorted[gi].date).getTime(), startMs, endMs, w)
+    let gj = gi + 1
+    while (gj < sorted.length) {
+      const xj = dateToX(new Date(sorted[gj].date).getTime(), startMs, endMs, w)
+      if (xj - groupX < CLUSTER_THRESHOLD) { group.push(sorted[gj]); gj++ }
+      else break
+    }
+    groups.push(group)
+    gi += group.length
+  }
+
+  const singles      = groups.filter(g => g.length === 1).map(g => g[0])
+  const clusterGroups = groups.filter(g => g.length > 1)
+  const withLanes    = assignLanes(singles, maxLane, msPerPx * CARD_W)
 
   // ── Pan ─────────────────────────────────────────────────────────────────────
   // startDrag reads panMsRef so it doesn't need panMs as a dep
@@ -344,6 +368,59 @@ const Timeline = forwardRef(function Timeline(
                     fill={m.color} />
                 </g>
               )}
+            </g>
+          )
+        })}
+
+        {/* ── Cluster badges ──────────────────────────────────────────────── */}
+        {clusterGroups.map((group, idx) => {
+          const xs    = group.map(m => dateToX(new Date(m.date).getTime(), startMs, endMs, w))
+          const avgX  = xs.reduce((a, b) => a + b, 0) / xs.length
+          if (avgX < -40 || avgX > w + 40) return null
+
+          const count     = group.length
+          const colors    = [...new Map(group.map(m => [m.color, m.color])).values()].slice(0, 5)
+          const years     = group.map(m => new Date(m.date).getFullYear())
+          const minY      = Math.min(...years)
+          const maxY      = Math.max(...years)
+          const rangeLabel = minY === maxY ? String(minY) : `${minY}–${maxY}`
+          const clCenterMs = group.reduce((s, m) => s + new Date(m.date).getTime(), 0) / count
+
+          const R      = 11
+          const badgeCy = axisY - R - 10
+
+          return (
+            <g key={`cl-${idx}`} style={{ cursor: 'pointer' }}
+               onClick={() => onClusterClick?.(clCenterMs)}>
+              {/* Dashed connector */}
+              <line x1={avgX} y1={axisY - 5} x2={avgX} y2={badgeCy + R}
+                stroke="rgba(200,169,110,0.22)" strokeWidth={1} strokeDasharray="2 3" />
+              {/* Axis dot */}
+              <circle cx={avgX} cy={axisY} r={5}
+                fill="#0D0F16" stroke="rgba(200,169,110,0.55)" strokeWidth={1.2} />
+              {/* Badge circle */}
+              <circle cx={avgX} cy={badgeCy} r={R}
+                fill="rgba(13,15,22,0.94)" stroke="rgba(200,169,110,0.4)" strokeWidth={1} />
+              {/* Count */}
+              <text x={avgX} y={badgeCy + 4}
+                textAnchor="middle"
+                fill="rgba(200,169,110,0.9)"
+                fontSize="0.58em" fontFamily="'Courier Prime', monospace" fontWeight="bold"
+              >{count}</text>
+              {/* Category colour dots above badge */}
+              {colors.map((color, ci) => {
+                const spread = (colors.length - 1) * 6
+                return (
+                  <circle key={ci} cx={avgX + ci * 6 - spread / 2} cy={badgeCy - R - 6}
+                    r={2.5} fill={color} opacity={0.82} />
+                )
+              })}
+              {/* Date range */}
+              <text x={avgX} y={axisY + 22}
+                textAnchor="middle"
+                fill="rgba(232,224,208,0.2)"
+                fontSize="0.5em" fontFamily="'Courier Prime', monospace"
+              >{rangeLabel}</text>
             </g>
           )
         })}

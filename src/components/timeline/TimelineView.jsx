@@ -159,6 +159,13 @@ export default function TimelineView({ milestones, setMilestones }) {
     setHighlightsActive(true)
   }
 
+  // ── Cluster click: zoom in one level and pan to cluster centre ───────────────
+  function handleClusterClick(clusterCenterMs) {
+    timelineRef.current?.panToMs(clusterCenterMs)
+    const idx = ZOOM_LEVELS.indexOf(zoom)
+    if (idx < ZOOM_LEVELS.length - 1) handleZoom(ZOOM_LEVELS[idx + 1])
+  }
+
   // ── View mode ────────────────────────────────────────────────────────────────
   function handleViewMode(mode) {
     setViewMode(mode)
@@ -377,6 +384,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             panMs={panMs}
             onPanMs={setPanMs}
             viewMode={viewMode}
+            onClusterClick={handleClusterClick}
           />
         </div>
 
