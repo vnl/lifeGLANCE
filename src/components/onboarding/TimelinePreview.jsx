@@ -22,7 +22,7 @@ export default function TimelinePreview({ milestones = [] }) {
 
   return (
     <div className="timeline-preview" ref={ref}>
-      <svg width={width} height={HEIGHT} style={{ display: 'block' }}>
+      <svg width={width} height={HEIGHT} style={{ display: 'block', fontSize: '1rem' }}>
         <defs>
           <linearGradient id="prev-left"  x1="0" x2="1" y1="0" y2="0">
             <stop offset="0"   stopColor="#0F1117" stopOpacity="1" />
@@ -49,7 +49,7 @@ export default function TimelinePreview({ milestones = [] }) {
           x={todayX} y={6}
           textAnchor="middle"
           fill="#C8A96E"
-          fontSize={8}
+          fontSize="0.5em"
           fontFamily="'Courier Prime', monospace"
           opacity={0.7}
         >
@@ -75,7 +75,7 @@ export default function TimelinePreview({ milestones = [] }) {
                 x={x} y={above ? y - 7 : y + 13}
                 textAnchor="middle"
                 fill="rgba(232,224,208,0.7)"
-                fontSize={7}
+                fontSize="0.44em"
                 fontFamily="'Courier Prime', monospace"
               >
                 {m.title.length > 14 ? m.title.slice(0, 14) + '…' : m.title}
