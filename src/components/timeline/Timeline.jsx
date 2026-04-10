@@ -74,7 +74,7 @@ const Timeline = forwardRef(function Timeline({ milestones, zoom, onMilestoneCli
         width={w}
         height={h}
         viewBox={`0 0 ${w} ${h}`}
-        style={{ display: 'block' }}
+        style={{ display: 'block', fontSize: '1rem' }}
       >
         <defs>
           <linearGradient id="tl-left" x1="0" x2="1" y1="0" y2="0">
@@ -101,7 +101,7 @@ const Timeline = forwardRef(function Timeline({ milestones, zoom, onMilestoneCli
                 x={tick.x} y={axisY + 20}
                 textAnchor="middle"
                 fill={tick.major ? 'rgba(232,224,208,0.35)' : 'rgba(232,224,208,0.18)'}
-                fontSize={tick.major ? 11 : 9}
+                fontSize={tick.major ? '0.69em' : '0.56em'}
                 fontFamily="'Courier Prime', monospace"
               >
                 {tick.label}
@@ -128,7 +128,7 @@ const Timeline = forwardRef(function Timeline({ milestones, zoom, onMilestoneCli
             <text
               x={todayX} y={16}
               textAnchor="middle"
-              fill="#C8A96E" fontSize={9}
+              fill="#C8A96E" fontSize="0.56em"
               fontFamily="'Courier Prime', monospace"
               opacity={0.75}
             >
@@ -177,7 +177,7 @@ const Timeline = forwardRef(function Timeline({ milestones, zoom, onMilestoneCli
                 x={x} y={labelY}
                 textAnchor="middle"
                 fill="rgba(232,224,208,0.82)"
-                fontSize={9.5}
+                fontSize="0.59em"
                 fontFamily="'Courier Prime', monospace"
               >
                 {label}
