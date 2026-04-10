@@ -167,7 +167,8 @@ export default function TimelineView({ milestones, setMilestones }) {
 
   useEffect(() => {
     function onKey(e) {
-      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName)) return
+      // Allow Escape through even when an input is focused (to close modals)
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(e.target.tagName) && e.key !== 'Escape') return
       const s = keyStateRef.current
       const anyModal = s.addOpen || !!s.detail || s.settingsOpen
 
@@ -205,7 +206,7 @@ export default function TimelineView({ milestones, setMilestones }) {
         }
         case 'n': case 'N': {
           if (s.settingsOpen || !!s.detail) break
-          if (!s.addOpen) setAddOpen(true)
+          if (!s.addOpen) { e.preventDefault(); setAddOpen(true) }
           break
         }
         case 's': case 'S': {
