@@ -367,6 +367,29 @@ button, input, select, textarea {
 .zoom-tab:hover { color: var(--text-dim); background: rgba(200, 169, 110, 0.06); }
 .zoom-tab.active { color: var(--amber); background: rgba(200, 169, 110, 0.1); }
 
+/* ─── View mode toggle ─────────────────────────────────────────────────────── */
+.view-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+}
+.view-tab {
+  padding: 0.18rem 0.65rem;
+  background: transparent;
+  border: none;
+  border-left: 1px solid var(--border);
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 0.62rem;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+.view-tab:first-child { border-left: none; }
+.view-tab:hover { color: var(--text-dim); background: rgba(200, 169, 110, 0.06); }
+.view-tab.active { color: var(--amber); background: rgba(200, 169, 110, 0.1); }
+
 .timeline-body {
   flex: 1;
   position: relative;

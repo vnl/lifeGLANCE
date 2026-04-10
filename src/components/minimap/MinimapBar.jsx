@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react'
-import { getTimeRange } from '../../utils/timeline'
+import { getTimeRangeForView } from '../../utils/timeline'
 
 const H = 40
 
-export default function MinimapBar({ milestones, panMs, onPanDirect, panToMs, zoom, customHalfMs }) {
+export default function MinimapBar({ milestones, panMs, onPanDirect, panToMs, zoom, customHalfMs, viewMode = 'all' }) {
   const wrapRef = useRef(null)
   const [w, setW] = useState(800)
 
@@ -32,7 +32,7 @@ export default function MinimapBar({ milestones, panMs, onPanDirect, panToMs, zo
 
   // Current viewport rect
   const centerMs = todayMs + panMs
-  const { startMs: vsStart, endMs: vsEnd } = getTimeRange(zoom, centerMs, customHalfMs)
+  const { startMs: vsStart, endMs: vsEnd } = getTimeRangeForView(zoom, centerMs, viewMode, customHalfMs)
   const vx1 = Math.max(0,  msToX(vsStart))
   const vx2 = Math.min(w,  msToX(vsEnd))
 

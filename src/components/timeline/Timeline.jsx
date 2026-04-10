@@ -2,7 +2,7 @@ import React, {
   useRef, useState, useEffect, useCallback,
   useImperativeHandle, forwardRef,
 } from 'react'
-import { dateToX, getTimeRange, getTickMarks, assignLanes, getMsPerPx } from '../../utils/timeline'
+import { dateToX, getTimeRangeForView, getTickMarks, assignLanes, getMsPerPx } from '../../utils/timeline'
 import { relativeLabel, formatDateDisplay } from '../../utils/dates'
 
 // Map text-size labels → root px value (must match TimelineView TEXT_SIZES)
@@ -34,7 +34,7 @@ function wrapTitle(text, maxChars) {
 }
 
 const Timeline = forwardRef(function Timeline(
-  { milestones, zoom, textSize = 'normal', onMilestoneClick, customHalfMs = 0, highlightedIds, panMs, onPanMs },
+  { milestones, zoom, textSize = 'normal', onMilestoneClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all' },
   ref
 ) {
   const remPx = REM_PX[textSize] || 22
@@ -106,7 +106,7 @@ const Timeline = forwardRef(function Timeline(
   const axisY    = Math.round(h * 0.5)
   const today    = new Date()
   const centerMs = today.getTime() + panMs
-  const { startMs, endMs } = getTimeRange(zoom, centerMs, customHalfMs)
+  const { startMs, endMs } = getTimeRangeForView(zoom, centerMs, viewMode, customHalfMs)
   const ticks    = getTickMarks(zoom, startMs, endMs, w)
   const todayX   = dateToX(today.getTime(), startMs, endMs, w)
   const msPerPx  = getMsPerPx(zoom, w, customHalfMs)

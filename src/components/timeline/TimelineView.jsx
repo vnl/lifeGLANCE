@@ -39,6 +39,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   const [highlightsActive, setHighlightsActive] = useState(true)
   const [settingsOpen,  setSettingsOpen]  = useState(false)
   const [helpOpen,      setHelpOpen]      = useState(false)
+  const [viewMode,      setViewMode]      = useState('all')
   const [categories,    setCategories]    = useState(loadCategories)
   const [panMs,         setPanMs]         = useState(0)
 
@@ -156,6 +157,13 @@ export default function TimelineView({ milestones, setMilestones }) {
     setFutureIdx(0)
     setSelectedId(null)
     setHighlightsActive(true)
+  }
+
+  // ── View mode ────────────────────────────────────────────────────────────────
+  function handleViewMode(mode) {
+    setViewMode(mode)
+    setPanMs(0)
+    if (timelineRef.current) timelineRef.current.resetPan()
   }
 
   // ── Keyboard shortcuts ────────────────────────────────────────────────────────
@@ -325,6 +333,14 @@ export default function TimelineView({ milestones, setMilestones }) {
                 options={{ delay: 38, jitter: 18 }} showCursor={false} hideCursorWhenDone />
             )}
           </div>
+
+          <div className="view-tabs">
+            {[['all', '← all →'], ['past', '← past'], ['future', 'future →']].map(([mode, label]) => (
+              <button key={mode}
+                className={`view-tab ${viewMode === mode ? 'active' : ''}`}
+                onClick={() => handleViewMode(mode)}>{label}</button>
+            ))}
+          </div>
         </div>
 
         {/* Right: settings + help */}
@@ -343,6 +359,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             pastIdx={pastIdx} futureIdx={futureIdx}
             onPastChange={handlePastNav}
             onFutureChange={handleFutureNav}
+            viewMode={viewMode}
           />
         )}
 
@@ -357,6 +374,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             onMilestoneClick={handleMilestoneClick}
             panMs={panMs}
             onPanMs={setPanMs}
+            viewMode={viewMode}
           />
         </div>
 
@@ -383,6 +401,7 @@ export default function TimelineView({ milestones, setMilestones }) {
           panToMs={(ms) => timelineRef.current?.panToMs(ms)}
           zoom={zoom}
           customHalfMs={customHalfMs}
+          viewMode={viewMode}
         />
       )}
 
