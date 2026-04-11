@@ -4,9 +4,11 @@
  * All play functions are no-ops when muted or before init().
  */
 
-let ctx          = null
-let ambientNodes = []
-let _muted       = localStorage.getItem('lifeglance-sound') === 'off'
+let ctx           = null
+let ambientNodes  = []
+let ambientActive = false
+let melodyTimer   = null
+let _muted        = localStorage.getItem('lifeglance-sound') === 'off'
 
 // ── Context ───────────────────────────────────────────────────────────────────
 
@@ -37,7 +39,7 @@ export function setMuted(val) {
 }
 export function toggleMuted() { setMuted(!_muted); return _muted }
 
-// ── Primitive: single sine/oscillator tone ────────────────────────────────────
+// ── Primitive: single sine tone with envelope ─────────────────────────────────
 
 function tone(freq, duration, peak = 0.09, type = 'sine', delaySec = 0) {
   if (_muted) return
@@ -58,63 +60,106 @@ function tone(freq, duration, peak = 0.09, type = 'sine', delaySec = 0) {
 }
 
 // ── Typewriter key click ──────────────────────────────────────────────────────
-// Short filtered noise burst — muted click of a mechanical key.
+// A short frequency-swept sine: starts at ~1500–2000 Hz and drops to ~20%
+// of that over 11 ms — mimics the physics of a key strike (high-frequency
+// contact transient that immediately settles). No noise = no fart.
 
 export function playKeyClick() {
   if (_muted) return
   const c = getCtx()
   if (!c) return
-  const dur    = 0.018
-  const bufLen = Math.ceil(c.sampleRate * dur)
-  const buf    = c.createBuffer(1, bufLen, c.sampleRate)
-  const data   = buf.getChannelData(0)
-  for (let i = 0; i < bufLen; i++) {
-    data[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / bufLen, 3)
-  }
-  const src  = c.createBufferSource()
-  src.buffer = buf
-  const filt = c.createBiquadFilter()
-  filt.type           = 'bandpass'
-  filt.frequency.value = 650 + Math.random() * 250
-  filt.Q.value        = 0.9
+  const t0        = c.currentTime
+  const startFreq = 1500 + Math.random() * 500   // slight per-key variation
+  const osc  = c.createOscillator()
   const gain = c.createGain()
-  gain.gain.value = 0.13
-  src.connect(filt)
-  filt.connect(gain)
+  osc.connect(gain)
   gain.connect(c.destination)
-  src.start()
+  osc.type = 'sine'
+  osc.frequency.setValueAtTime(startFreq, t0)
+  osc.frequency.exponentialRampToValueAtTime(startFreq * 0.2, t0 + 0.011)
+  gain.gain.setValueAtTime(0, t0)
+  gain.gain.linearRampToValueAtTime(0.08, t0 + 0.001)
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.014)
+  osc.start(t0)
+  osc.stop(t0 + 0.02)
+}
+
+// ── Piano note (used by melody + chime) ──────────────────────────────────────
+// Fundamental sine + 2nd harmonic at 28 % for body. Fast attack, long decay.
+
+function playPianoNote(freq, vel = 0.07, decaySec = 1.8) {
+  if (_muted) return
+  const c = getCtx()
+  if (!c) return
+  const t0 = c.currentTime
+  ;[[1, vel], [2, vel * 0.28]].forEach(([mult, peak]) => {
+    const osc  = c.createOscillator()
+    const gain = c.createGain()
+    osc.connect(gain)
+    gain.connect(c.destination)
+    osc.type = 'sine'
+    osc.frequency.value = freq * mult
+    gain.gain.setValueAtTime(0, t0)
+    gain.gain.linearRampToValueAtTime(peak, t0 + 0.012)
+    gain.gain.exponentialRampToValueAtTime(0.0001, t0 + decaySec)
+    osc.start(t0)
+    osc.stop(t0 + decaySec + 0.05)
+  })
 }
 
 // ── Milestone save chime ──────────────────────────────────────────────────────
-// C major triad arpeggio — C5 → E5 → G5 — "this moment is placed".
+// C major triad arpeggio played as piano notes: C5 → E5 → G5
 
 export function playChime() {
-  tone(523.25, 1.1,  0.10, 'sine', 0)
-  tone(659.25, 0.95, 0.07, 'sine', 0.07)
-  tone(783.99, 0.80, 0.05, 'sine', 0.14)
+  playPianoNote(523.25, 0.10, 1.1)
+  setTimeout(() => playPianoNote(659.25, 0.07, 0.95), 70)
+  setTimeout(() => playPianoNote(783.99, 0.05, 0.80), 140)
 }
 
-// ── Edit save (single softer note) ───────────────────────────────────────────
+// ── Edit save ─────────────────────────────────────────────────────────────────
 
 export function playEditSave() {
-  tone(523.25, 0.7, 0.07, 'sine', 0)
+  playPianoNote(523.25, 0.07, 0.7)
 }
 
 // ── Navigation tick ───────────────────────────────────────────────────────────
-// Lower pitch = moving into the past; higher = moving into the future.
+// Lower pitch = past (going back); higher = future (going forward).
 
 export function playNavTick(goingForward = false) {
   tone(goingForward ? 587.33 : 369.99, 0.13, 0.045, 'sine', 0)
 }
 
-// ── Onboarding ambient drone ──────────────────────────────────────────────────
-// A2 (110 Hz) drone + slight detune copy + E3 fifth, each with a slow LFO
-// for a subtle breathing quality.
+// ── Onboarding ambient ────────────────────────────────────────────────────────
+// Drone: A2 (110 Hz) + detuned copy + E3 fifth, each with a slow LFO tremolo.
+// Melody: random pentatonic piano notes every 1.5–5 s, starting 2.2 s in.
+
+// A minor pentatonic, 4th–5th octave
+const PENTATONIC = [
+  261.63,  // C4
+  293.66,  // D4
+  329.63,  // E4
+  392.00,  // G4
+  440.00,  // A4
+  523.25,  // C5
+  587.33,  // D5
+  659.25,  // E5
+  783.99,  // G5
+  880.00,  // A5
+]
+
+function scheduleMelody() {
+  if (!ambientActive || _muted) return
+  const freq = PENTATONIC[Math.floor(Math.random() * PENTATONIC.length)]
+  const vel  = 0.035 + Math.random() * 0.025   // dynamic variation
+  playPianoNote(freq, vel, 1.6)
+  melodyTimer = setTimeout(scheduleMelody, 1500 + Math.random() * 3500)
+}
 
 export function startAmbient() {
-  if (_muted || ambientNodes.length) return
+  if (_muted || ambientActive) return
   const c = getCtx()
   if (!c) return
+  ambientActive = true
 
   const voices = [
     { freq: 110.0,  peakGain: 0.035, lfoFreq: 0.17 },
@@ -130,7 +175,6 @@ export function startAmbient() {
 
     osc.type = 'sine'
     osc.frequency.value = freq
-
     lfo.type = 'sine'
     lfo.frequency.value = lfoFreq
     lfoGn.gain.value = peakGain * 0.3   // LFO depth = 30 % of base gain
@@ -148,12 +192,20 @@ export function startAmbient() {
 
     ambientNodes.push({ osc, gainNd, lfo })
   })
+
+  // Start melody once the drone has faded in
+  melodyTimer = setTimeout(scheduleMelody, 2200)
 }
 
 function _fadeOutAmbient() {
-  const c = ctx   // use raw ctx — getCtx() might be null if closed
+  ambientActive = false
+  clearTimeout(melodyTimer)
+  melodyTimer = null
+
+  const c     = ctx
   const nodes = ambientNodes
   ambientNodes = []
+
   nodes.forEach(({ osc, gainNd, lfo }) => {
     if (c && c.state !== 'closed') {
       gainNd.gain.cancelScheduledValues(c.currentTime)

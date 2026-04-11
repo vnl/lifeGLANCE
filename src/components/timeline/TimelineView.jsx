@@ -408,6 +408,7 @@ export default function TimelineView({ milestones, setMilestones }) {
 
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   async function handleSave(data, existing) {
+    audio.init()   // ensure AudioContext is running (form submit = user gesture)
     if (existing) {
       const updated = await updateMilestone(existing.id, data, existing)
       const newMs = milestones.map(m => m.id === existing.id ? updated : m)
