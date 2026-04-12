@@ -68,7 +68,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   const [helpOpen,      setHelpOpen]      = useState(false)
   const [searchOpen,    setSearchOpen]    = useState(false)
   const [viewMode,      setViewMode]      = useState('all')
-  const [recurFilter,   setRecurFilter]   = useState('all')
+  const [recurFilter,   setRecurFilter]   = useState('next')
   const [categories,    setCategories]    = useState(loadCategories)
   const [panMs,         setPanMs]         = useState(0)
   const [compactHeader, setCompactHeader] = useState(
