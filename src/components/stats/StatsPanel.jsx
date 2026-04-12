@@ -62,7 +62,7 @@ export default function StatsPanel({ past, future, pastIdx, futureIdx, onPastCha
           <div className="stat-pill-wrap">
             <button className={`stat-pill${pastOpen ? ' stat-pill-active' : ''}`}
               onClick={() => setPastOpen(o => !o)}>
-              ← {past.length}
+              ← past
             </button>
             {pastOpen && (
               <div className="stat-panel stat-panel-popup"
@@ -88,7 +88,7 @@ export default function StatsPanel({ past, future, pastIdx, futureIdx, onPastCha
           <div className="stat-pill-wrap stat-pill-wrap-right">
             <button className={`stat-pill${futureOpen ? ' stat-pill-active' : ''}`}
               onClick={() => setFutureOpen(o => !o)}>
-              {future.length} →
+              future →
             </button>
             {futureOpen && (
               <div className="stat-panel stat-panel-right stat-panel-popup"
