@@ -200,7 +200,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   const filteredMilestones = applyRecurFilter(categoryFiltered, recurFilter)
 
   function cycleRecurFilter() {
-    setRecurFilter(f => ({ all: 'past', past: 'next', next: 'future', future: 'all' }[f]))
+    setRecurFilter(f => ({ next: 'all', all: 'past', past: 'future', future: 'next' }[f]))
   }
 
   // ── "On this day" — milestones that share today's month (and day if precision allows) ──
@@ -541,10 +541,10 @@ export default function TimelineView({ milestones, setMilestones }) {
       const rid       = crypto.randomUUID()
       const baseDate  = new Date(data.date)
       const baseYear  = baseDate.getFullYear()
-      const endYear   = Math.min(
+      const endYear   = Math.max(baseYear, Math.min(
         data.recurrenceEndYear ?? Math.max(baseYear, new Date().getFullYear()) + 3,
         baseYear + 99
-      )
+      ))
       const created   = []
       for (let y = baseYear; y <= endYear; y++) {
         const d = new Date(baseDate)
@@ -765,7 +765,7 @@ export default function TimelineView({ milestones, setMilestones }) {
                 </div>
                 {hasRecurring && (
                   <button
-                    className={`recur-filter-btn${recurFilter !== 'all' ? ' active' : ''}`}
+                    className={`recur-filter-btn${recurFilter !== 'next' ? ' active' : ''}`}
                     onClick={cycleRecurFilter}>
                     recurring: {recurFilter}
                   </button>
@@ -814,7 +814,7 @@ export default function TimelineView({ milestones, setMilestones }) {
                 </div>
                 {hasRecurring && (
                   <button
-                    className={`recur-filter-btn${recurFilter !== 'all' ? ' active' : ''}`}
+                    className={`recur-filter-btn${recurFilter !== 'next' ? ' active' : ''}`}
                     onClick={cycleRecurFilter}>
                     recurring: {recurFilter}
                   </button>
