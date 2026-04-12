@@ -60,8 +60,7 @@ export default function TimelineView({ milestones, setMilestones }) {
     () => window.matchMedia('(max-height: 500px)').matches
   )
   const [minimapOpen,   setMinimapOpen]   = useState(
-    () => window.matchMedia('(max-height: 500px)').matches &&
-          (localStorage.getItem('lifeglance-text-size') || 'normal') === 'small'
+    () => window.matchMedia('(max-height: 500px)').matches
   )
   const [clustering,    setClustering]    = useState(
     () => localStorage.getItem('lifeglance-clustering') !== 'false'
@@ -129,11 +128,10 @@ export default function TimelineView({ milestones, setMilestones }) {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
-  // Auto-show minimap on ultra-compact only when text is small enough to fit.
-  // Auto-hide when leaving compact or switching to a larger text size.
+  // Auto-show minimap on ultra-compact screens; hide when leaving that range.
   useEffect(() => {
-    if (compactStats) setMinimapOpen(ultraCompact && textSize === 'small')
-  }, [compactStats, ultraCompact, textSize])
+    if (compactStats) setMinimapOpen(ultraCompact)
+  }, [compactStats, ultraCompact])
 
   // Restrict text size: big/bigger cards overflow the axis on short screens.
   useEffect(() => {
@@ -790,7 +788,7 @@ export default function TimelineView({ milestones, setMilestones }) {
               viewMode={viewMode}
             />
           )}
-          {compactStats && (!minimapOpen || !(ultraCompact && textSize === 'small')) && (
+          {compactStats && (!minimapOpen || !ultraCompact) && (
             <button
               className={`minimap-grip${minimapOpen ? ' minimap-grip-open' : ''}`}
               onClick={() => setMinimapOpen(o => !o)}>
