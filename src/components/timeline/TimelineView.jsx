@@ -541,10 +541,10 @@ export default function TimelineView({ milestones, setMilestones }) {
       const rid       = crypto.randomUUID()
       const baseDate  = new Date(data.date)
       const baseYear  = baseDate.getFullYear()
-      const endYear   = Math.min(
+      const endYear   = Math.max(baseYear, Math.min(
         data.recurrenceEndYear ?? Math.max(baseYear, new Date().getFullYear()) + 3,
         baseYear + 99
-      )
+      ))
       const created   = []
       for (let y = baseYear; y <= endYear; y++) {
         const d = new Date(baseDate)
