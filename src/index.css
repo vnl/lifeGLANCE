@@ -1606,14 +1606,30 @@ button, input, select, textarea {
 .help-footer {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-end;
   padding-top: 0.75rem;
   margin-top: 0.5rem;
   border-top: 1px solid var(--border);
+  gap: 1rem;
+}
+.help-footer-storage {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
 }
 .help-footer-meta {
   font-size: 0.62rem;
   color: var(--text-muted);
+}
+.help-footer-value {
+  color: var(--text-dim);
+}
+.help-footer-dim {
+  opacity: 0.55;
+}
+.help-footer-version {
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 /* ─── Search palette ───────────────────────────────────────────────────────── */
