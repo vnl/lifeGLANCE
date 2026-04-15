@@ -20,13 +20,20 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
   const [category,   setCategory]   = useState(existing?.category  ?? 'personal')
   const [note,       setNote]       = useState(existing?.note       ?? '')
   const [url,        setUrl]        = useState(existing?.url        ?? '')
-  const [photoUri,   setPhotoUri]   = useState(existing?.photo_uri  ?? '')
-  const [audioUri,   setAudioUri]   = useState(existing?.audio_uri  ?? '')
-  const [recurrence, setRecurrence] = useState(false)
-  const [recEndYear, setRecEndYear] = useState('')
-  const [busy,       setBusy]       = useState(false)
+  const [photoUri,      setPhotoUri]      = useState(existing?.photo_uri ?? '')
+  const [audioFile,     setAudioFile]     = useState(null)   // new File selected this session
+  const [audioRemoved,  setAudioRemoved]  = useState(false)  // user cleared existing audio
+  const [audioObjectUrl, setAudioObjectUrl] = useState(null) // transient preview URL
+  const [recurrence,    setRecurrence]    = useState(false)
+  const [recEndYear,    setRecEndYear]    = useState('')
+  const [busy,          setBusy]          = useState(false)
   const photoRef = useRef(null)
   const audioRef = useRef(null)
+
+  // Revoke preview URL when it changes or the form unmounts
+  React.useEffect(() => {
+    return () => { if (audioObjectUrl) URL.revokeObjectURL(audioObjectUrl) }
+  }, [audioObjectUrl])
 
   // Pre-fill date from existing
   React.useEffect(() => {
@@ -68,7 +75,8 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         color: selectedCat?.color,
         note: note.trim(),
         photo_uri: photoUri,
-        audio_uri: audioUri,
+        audioFile,
+        audioRemoved,
         url: url.trim(),
         recurrence: (!isEdit && recurrence) ? 'annual' : (existing?.recurrence ?? null),
         recurrence_id: existing?.recurrence_id ?? null,
@@ -246,11 +254,30 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         {/* Audio */}
         <div className="sheet-field">
           <label className="field-label">audio (optional)</label>
-          {audioUri ? (
+          {audioFile && audioObjectUrl ? (
+            // New file selected this session — show inline preview
             <div className="audio-preview-wrap">
-              <audio controls src={audioUri} className="audio-preview" />
-              <button type="button" className="photo-remove"
-                onClick={() => { setAudioUri(''); if (audioRef.current) audioRef.current.value = '' }}>
+              <audio controls src={audioObjectUrl} className="audio-preview" />
+              <button type="button" className="btn-ghost" style={{ alignSelf: 'flex-start', fontSize: '0.72rem' }}
+                onClick={() => {
+                  setAudioFile(null)
+                  setAudioRemoved(true)
+                  setAudioObjectUrl(null)
+                  if (audioRef.current) audioRef.current.value = ''
+                }}>
+                remove
+              </button>
+            </div>
+          ) : existing?.has_audio && !audioRemoved ? (
+            // Existing audio — can't preview without fetching the blob; show indicator
+            <div className="audio-attached-row">
+              <span className="audio-attached-label">♪ audio attached</span>
+              <button type="button" className="btn-ghost" style={{ fontSize: '0.72rem' }}
+                onClick={() => audioRef.current?.click()}>
+                replace
+              </button>
+              <button type="button" className="btn-ghost" style={{ fontSize: '0.72rem' }}
+                onClick={() => { setAudioRemoved(true); setAudioFile(null) }}>
                 remove
               </button>
             </div>
@@ -267,9 +294,9 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
             onChange={e => {
               const file = e.target.files[0]
               if (!file) return
-              const reader = new FileReader()
-              reader.onload = () => setAudioUri(reader.result)
-              reader.readAsDataURL(file)
+              setAudioFile(file)
+              setAudioRemoved(false)
+              setAudioObjectUrl(URL.createObjectURL(file))
             }}
           />
         </div>

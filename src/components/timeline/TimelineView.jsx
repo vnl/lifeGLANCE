@@ -14,6 +14,7 @@ import TypewriterText    from '../ui/TypewriterText'
 import { ZOOM_LEVELS }   from '../../utils/timeline'
 import { loadCategories } from '../../utils/colors'
 import { addMilestone, updateMilestone, deleteMilestone, restoreMilestones } from '../../data/milestones'
+import { dbPutMedia } from '../../data/db'
 import { parseIcs }      from '../../utils/icsParser'
 import * as audio from '../../utils/audio'
 
@@ -538,19 +539,28 @@ export default function TimelineView({ milestones, setMilestones }) {
   // ── CRUD ─────────────────────────────────────────────────────────────────────
   async function handleSave(data, existing) {
     audio.init()   // ensure AudioContext is running (form submit = user gesture)
+
+    // audioFile / audioRemoved are transfer-only fields from the form — strip them
+    // before passing to the data layer, and handle blob persistence here.
+    const { audioFile, audioRemoved, ...milestoneData } = data
+
     if (existing) {
-      const updated = await updateMilestone(existing.id, data, existing)
+      const hasAudio = audioFile     ? true
+                     : audioRemoved  ? false
+                     : (existing.has_audio ?? false)
+      const updated = await updateMilestone(existing.id, { ...milestoneData, has_audio: hasAudio }, existing)
+      if (audioFile) await dbPutMedia(updated.id, audioFile)
       const newMs = milestones.map(m => m.id === existing.id ? updated : m)
       pushHistory(newMs)
       setMilestones(newMs)
       audio.playEditSave()
-    } else if (data.recurrence === 'annual') {
+    } else if (milestoneData.recurrence === 'annual') {
       // Generate one instance per year from base year to chosen end year (max +99)
       const rid       = crypto.randomUUID()
-      const baseDate  = new Date(data.date)
+      const baseDate  = new Date(milestoneData.date)
       const baseYear  = baseDate.getFullYear()
       const endYear   = Math.max(baseYear, Math.min(
-        data.recurrenceEndYear ?? Math.max(baseYear, new Date().getFullYear()) + 3,
+        milestoneData.recurrenceEndYear ?? Math.max(baseYear, new Date().getFullYear()) + 3,
         baseYear + 99
       ))
       const created   = []
@@ -558,15 +568,16 @@ export default function TimelineView({ milestones, setMilestones }) {
         const d = new Date(baseDate)
         d.setFullYear(y)
         const m = await addMilestone({
-          ...data,
+          ...milestoneData,
           date:          d,
           recurrence_id: rid,
           // only the base-year instance keeps the original note / photo / audio / url
-          note:      y === baseYear ? data.note      : '',
-          photo_uri: y === baseYear ? data.photo_uri : '',
-          audio_uri: y === baseYear ? data.audio_uri : '',
-          url:       y === baseYear ? data.url       : '',
+          note:      y === baseYear ? milestoneData.note      : '',
+          photo_uri: y === baseYear ? milestoneData.photo_uri : '',
+          has_audio: y === baseYear ? !!audioFile             : false,
+          url:       y === baseYear ? milestoneData.url       : '',
         })
+        if (y === baseYear && audioFile) await dbPutMedia(m.id, audioFile)
         created.push(m)
       }
       const newMs = [...milestones, ...created]
@@ -575,7 +586,8 @@ export default function TimelineView({ milestones, setMilestones }) {
       setNewlyAddedId(created[0].id)
       audio.playChime()
     } else {
-      const m = await addMilestone(data)
+      const m = await addMilestone({ ...milestoneData, has_audio: !!audioFile })
+      if (audioFile) await dbPutMedia(m.id, audioFile)
       const newMs = [...milestones, m]
       pushHistory(newMs)
       setMilestones(newMs)

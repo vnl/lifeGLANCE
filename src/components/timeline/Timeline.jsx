@@ -4,6 +4,7 @@ import React, {
 } from 'react'
 import { dateToX, getTimeRangeForView, getTickMarks, assignLanes, getMsPerPx } from '../../utils/timeline'
 import { relativeLabel, formatDateDisplay, ageAtDate } from '../../utils/dates'
+import { dbGetMedia } from '../../data/db'
 
 // Map text-size labels → root px value (must match TimelineView TEXT_SIZES)
 const REM_PX = { small: 19, normal: 22, big: 26, bigger: 30 }
@@ -107,22 +108,40 @@ const Timeline = forwardRef(function Timeline(
     panToMs:  (targetMs) => smoothPanTo(targetMs - Date.now()),
   }), [smoothPanTo])
 
-  // Audio playback — stop on unmount
+  // Audio playback — stop and revoke object URL on unmount
   useEffect(() => {
-    return () => { if (audioElRef.current) { audioElRef.current.pause(); audioElRef.current = null } }
+    return () => {
+      if (audioElRef.current) {
+        audioElRef.current.pause()
+        if (audioElRef.current._objectUrl) URL.revokeObjectURL(audioElRef.current._objectUrl)
+        audioElRef.current = null
+      }
+    }
   }, [])
 
   function handleAudioClick(m) {
+    // Stop whatever is currently playing
     if (audioElRef.current) {
       audioElRef.current.pause()
+      if (audioElRef.current._objectUrl) URL.revokeObjectURL(audioElRef.current._objectUrl)
       audioElRef.current = null
       if (playingId === m.id) { setPlayingId(null); return }
     }
-    const a = new Audio(m.audio_uri)
-    audioElRef.current = a
-    setPlayingId(m.id)
-    a.play().catch(() => {})
-    a.onended = () => { setPlayingId(null); audioElRef.current = null }
+    // Fetch blob lazily and play via a transient object URL
+    dbGetMedia(m.id).then(blob => {
+      if (!blob) return
+      const url = URL.createObjectURL(blob)
+      const a = new Audio(url)
+      a._objectUrl = url
+      audioElRef.current = a
+      setPlayingId(m.id)
+      a.play().catch(() => {})
+      a.onended = () => {
+        URL.revokeObjectURL(url)
+        audioElRef.current = null
+        setPlayingId(null)
+      }
+    })
   }
 
   // Measure container
@@ -438,7 +457,7 @@ const Timeline = forwardRef(function Timeline(
               {(() => {
                 const icons = []
                 if (m.photo_uri)  icons.push('camera')
-                if (m.audio_uri)  icons.push('audio')
+                if (m.has_audio)  icons.push('audio')
                 if (m.url)        icons.push('link')
                 if (m.recurrence) icons.push('recurrence')
                 return icons.map((type, i) => {

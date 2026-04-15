@@ -1,7 +1,20 @@
-import React from 'react'
+import React, { useState, useEffect } from 'react'
 import { formatDateDisplay, relativeLabel, ageAtDate } from '../../utils/dates'
+import { dbGetMedia } from '../../data/db'
 
 export default function MilestoneDetail({ milestone: m, onClose, onEdit, onDelete, onDeleteSeries, birthday }) {
+  const [audioUrl, setAudioUrl] = useState(null)
+
+  useEffect(() => {
+    if (!m.has_audio) return
+    let objectUrl
+    dbGetMedia(m.id).then(blob => {
+      if (!blob) return
+      objectUrl = URL.createObjectURL(blob)
+      setAudioUrl(objectUrl)
+    })
+    return () => { if (objectUrl) URL.revokeObjectURL(objectUrl) }
+  }, [m.id, m.has_audio])
   function handleDelete() {
     if (window.confirm(`Delete "${m.title}"?`)) {
       onDelete(m.id)
@@ -63,9 +76,9 @@ export default function MilestoneDetail({ milestone: m, onClose, onEdit, onDelet
 
 
         {/* Audio */}
-        {m.audio_uri && (
+        {audioUrl && (
           <div className="detail-audio-wrap">
-            <audio controls src={m.audio_uri} className="detail-audio" />
+            <audio controls src={audioUrl} className="detail-audio" />
           </div>
         )}
 

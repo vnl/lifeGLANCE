@@ -970,7 +970,6 @@ button, input, select, textarea {
 
 /* ─── Audio field in add/edit sheet ───────────────────────────────────────── */
 .audio-preview-wrap {
-  position: relative;
   align-self: stretch;
   display: flex;
   flex-direction: column;
@@ -979,6 +978,16 @@ button, input, select, textarea {
 .audio-preview {
   width: 100%;
   accent-color: var(--amber);
+}
+.audio-attached-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.audio-attached-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
 }
 
 /* ─── Audio player in detail sheet ────────────────────────────────────────── */
