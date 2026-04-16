@@ -9,6 +9,10 @@ Built for people who want to map their life without handing their data to a clou
 
 ---
 
+![lifeGLANCE timeline](docs/screenshot.png)
+
+---
+
 ## Install
 
 Use the hosted version at [lifeglance.app](https://lifeglance.app), or self-host with Docker (see below).
@@ -47,10 +51,6 @@ Use the hosted version at [lifeglance.app](https://lifeglance.app), or self-host
 - Ambient generative audio with mute toggle
 - Adjustable text size
 - Portrait-mode warning for mobile
-
----
-
-![lifeGLANCE timeline](docs/screenshot.png)
 
 ---
 
