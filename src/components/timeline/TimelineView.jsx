@@ -994,6 +994,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             customHalfMs={customHalfMs}
             highlightedIds={highlightedIds}
             onMilestoneClick={handleMilestoneClick}
+            onMilestoneDoubleClick={openEdit}
             panMs={panMs}
             onPanMs={setPanMs}
             viewMode={viewMode}
