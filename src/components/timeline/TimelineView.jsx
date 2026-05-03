@@ -15,7 +15,7 @@ import { ZOOM_LEVELS, applyRecurFilter } from '../../utils/timeline'
 import { expandAnnualDates } from '../../utils/recurrence'
 import { loadCategories } from '../../utils/colors'
 import { addMilestone, updateMilestone, deleteMilestone, restoreMilestones, uid } from '../../data/milestones'
-import { listEras, restoreEras } from '../../data/eras'
+import { listChapters, restoreChapters } from '../../data/chapters'
 import { dbPutMedia, dbPutPhoto, dbDeletePhoto, dbGetPhoto, dbPut } from '../../data/db'
 import { parseIcs }      from '../../utils/icsParser'
 import * as audio from '../../utils/audio'
@@ -81,7 +81,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   )
   const [canUndo,       setCanUndo]       = useState(false)
   const [canRedo,       setCanRedo]       = useState(false)
-  const [eras,          setEras]          = useState([])
+  const [chapters,      setChapters]      = useState([])
   const [newlyAddedId,  setNewlyAddedId]  = useState(null)
   const [summaryOpen,   setSummaryOpen]   = useState(false)
   const [onThisDayOpen, setOnThisDayOpen] = useState(false)
@@ -147,7 +147,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   }, [])
 
   useEffect(() => {
-    listEras().then(setEras).catch(console.error)
+    listChapters().then(setChapters).catch(console.error)
   }, [])
 
 
@@ -789,8 +789,8 @@ export default function TimelineView({ milestones, setMilestones }) {
       } catch { /* skip unreadable photo */ }
     }
 
-    const eras = await listEras()
-    const payload = { milestones, photos, eras }
+    const chapters = await listChapters()
+    const payload = { milestones, photos, chapters }
     const json = JSON.stringify(payload, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url  = URL.createObjectURL(blob)
@@ -848,13 +848,16 @@ export default function TimelineView({ milestones, setMilestones }) {
       const text   = await file.text()
       const parsed = JSON.parse(text)
 
-      // Support both legacy format (array) and new format ({ milestones, photos, eras })
-      const items  = Array.isArray(parsed) ? parsed : (parsed.milestones ?? parsed)
-      const photos = (!Array.isArray(parsed) && parsed.photos) ? parsed.photos : {}
-      const eras   = (!Array.isArray(parsed) && Array.isArray(parsed.eras)) ? parsed.eras : []
+      // Support both legacy format (array) and new format ({ milestones, photos, chapters })
+      // Also accept 'eras' key from backups made before the Chapters rename.
+      const items    = Array.isArray(parsed) ? parsed : (parsed.milestones ?? parsed)
+      const photos   = (!Array.isArray(parsed) && parsed.photos) ? parsed.photos : {}
+      const chapters = (!Array.isArray(parsed) && Array.isArray(parsed.chapters)) ? parsed.chapters
+                     : (!Array.isArray(parsed) && Array.isArray(parsed.eras))     ? parsed.eras
+                     : []
 
       const restored = await restoreMilestones(items)
-      await restoreEras(eras)
+      await restoreChapters(chapters)
 
       // Re-import photo blobs into the media store
       for (const m of restored) {
@@ -1031,7 +1034,7 @@ export default function TimelineView({ milestones, setMilestones }) {
           <Timeline
             ref={timelineRef}
             milestones={filteredMilestones}
-            eras={eras}
+            chapters={chapters}
             zoom={zoom}
             textSize={textSize}
             customHalfMs={customHalfMs}

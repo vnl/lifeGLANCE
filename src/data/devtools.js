@@ -1,21 +1,21 @@
 import {
-  createEra, getEra, listEras, updateEra, deleteEra,
-  addMilestoneToEra, removeMilestoneFromEra,
-  getMilestonesInEra, getErasForMilestone,
-} from './eras'
+  createChapter, getChapter, listChapters, updateChapter, deleteChapter,
+  addMilestoneToChapter, removeMilestoneFromChapter,
+  getMilestonesInChapter, getChaptersForMilestone,
+} from './chapters'
 import { loadMilestones } from './milestones'
 
 // Attaches window.lg — a set of dev-console-callable functions for verifying
-// the Phase 1 Era data model.  Call window.lg.help() for a usage summary.
+// the Phase 1 Chapter data model.  Call window.lg.help() for a usage summary.
 //
 // Verification workflow from the PR description:
-//   1. lg.createEra(...)           — create an era, see it written to IDB
-//   2. lg.addMilestoneToEra(...)   — add a milestone, see era updated
-//   3. lg.getEra(id)               — confirm milestone is in era.milestoneIds
-//   4. lg.getErasForMilestone(id)  — confirm era appears for that milestone
-//   5. lg.updateEra(id, {...})     — update a field, reload app, lg.getEra(id) again
-//   6. lg.deleteEra(id)            — delete; lg.getErasForMilestone(id) returns []
-//   7. lg.checkMigration()         — log milestone count + sample mainTimelineVisibility
+//   1. lg.createChapter(...)              — create a chapter, see it written to IDB
+//   2. lg.addMilestoneToChapter(...)      — add a milestone, see chapter updated
+//   3. lg.getChapter(id)                  — confirm milestone is in chapter.milestoneIds
+//   4. lg.getChaptersForMilestone(id)     — confirm chapter appears for that milestone
+//   5. lg.updateChapter(id, {...})        — update a field, reload app, lg.getChapter(id) again
+//   6. lg.deleteChapter(id)              — delete; lg.getChaptersForMilestone(id) returns []
+//   7. lg.checkMigration()               — log milestone count + sample mainTimelineVisibility
 
 export function registerDevtools() {
   window.lg = {
@@ -23,18 +23,18 @@ export function registerDevtools() {
       console.log(`
 lifeGLANCE Phase 1 devtools  (window.lg)
 ─────────────────────────────────────────
-Era CRUD
-  lg.createEra({ title, start, end, color, description?, defaultMemberVisibility?, parentEraId? })
-  lg.getEra(id)
-  lg.listEras()
-  lg.updateEra(id, { ...fields })
-  lg.deleteEra(id)
+Chapter CRUD
+  lg.createChapter({ title, start, end, color, description?, defaultMemberVisibility?, parentChapterId? })
+  lg.getChapter(id)
+  lg.listChapters()
+  lg.updateChapter(id, { ...fields })
+  lg.deleteChapter(id)
 
 Membership
-  lg.addMilestoneToEra(eraId, milestoneId)
-  lg.removeMilestoneFromEra(eraId, milestoneId)
-  lg.getMilestonesInEra(eraId)
-  lg.getErasForMilestone(milestoneId)
+  lg.addMilestoneToChapter(chapterId, milestoneId)
+  lg.removeMilestoneFromChapter(chapterId, milestoneId)
+  lg.getMilestonesInChapter(chapterId)
+  lg.getChaptersForMilestone(milestoneId)
 
 Migration
   lg.checkMigration()   — log milestone count + sample mainTimelineVisibility
@@ -43,59 +43,59 @@ All functions return Promises; await them or check the console.
       `.trim())
     },
 
-    async createEra(fields) {
-      const era = await createEra(fields)
-      console.log('[lg.createEra] written to IDB:', era)
-      return era
+    async createChapter(fields) {
+      const chapter = await createChapter(fields)
+      console.log('[lg.createChapter] written to IDB:', chapter)
+      return chapter
     },
 
-    async getEra(id) {
-      const era = await getEra(id)
-      console.log('[lg.getEra] read from IDB:', era)
-      return era
+    async getChapter(id) {
+      const chapter = await getChapter(id)
+      console.log('[lg.getChapter] read from IDB:', chapter)
+      return chapter
     },
 
-    async listEras() {
-      const eras = await listEras()
-      console.log('[lg.listEras] read from IDB:', eras)
-      return eras
+    async listChapters() {
+      const chapters = await listChapters()
+      console.log('[lg.listChapters] read from IDB:', chapters)
+      return chapters
     },
 
-    async updateEra(id, updates) {
-      const existing = await getEra(id)
-      if (!existing) { console.error('[lg.updateEra] era not found:', id); return null }
-      const era = await updateEra(id, updates, existing)
-      console.log('[lg.updateEra] written to IDB:', era)
-      return era
+    async updateChapter(id, updates) {
+      const existing = await getChapter(id)
+      if (!existing) { console.error('[lg.updateChapter] chapter not found:', id); return null }
+      const chapter = await updateChapter(id, updates, existing)
+      console.log('[lg.updateChapter] written to IDB:', chapter)
+      return chapter
     },
 
-    async deleteEra(id) {
-      await deleteEra(id)
-      console.log('[lg.deleteEra] deleted era id:', id)
+    async deleteChapter(id) {
+      await deleteChapter(id)
+      console.log('[lg.deleteChapter] deleted chapter id:', id)
     },
 
-    async addMilestoneToEra(eraId, milestoneId) {
-      const era = await addMilestoneToEra(eraId, milestoneId)
-      console.log('[lg.addMilestoneToEra] era milestoneIds:', era.milestoneIds)
-      return era
+    async addMilestoneToChapter(chapterId, milestoneId) {
+      const chapter = await addMilestoneToChapter(chapterId, milestoneId)
+      console.log('[lg.addMilestoneToChapter] chapter milestoneIds:', chapter.milestoneIds)
+      return chapter
     },
 
-    async removeMilestoneFromEra(eraId, milestoneId) {
-      const era = await removeMilestoneFromEra(eraId, milestoneId)
-      console.log('[lg.removeMilestoneFromEra] era milestoneIds:', era.milestoneIds)
-      return era
+    async removeMilestoneFromChapter(chapterId, milestoneId) {
+      const chapter = await removeMilestoneFromChapter(chapterId, milestoneId)
+      console.log('[lg.removeMilestoneFromChapter] chapter milestoneIds:', chapter.milestoneIds)
+      return chapter
     },
 
-    async getMilestonesInEra(eraId) {
-      const ids = await getMilestonesInEra(eraId)
-      console.log('[lg.getMilestonesInEra] milestoneIds:', ids)
+    async getMilestonesInChapter(chapterId) {
+      const ids = await getMilestonesInChapter(chapterId)
+      console.log('[lg.getMilestonesInChapter] milestoneIds:', ids)
       return ids
     },
 
-    async getErasForMilestone(milestoneId) {
-      const eras = await getErasForMilestone(milestoneId)
-      console.log('[lg.getErasForMilestone] eras:', eras)
-      return eras
+    async getChaptersForMilestone(milestoneId) {
+      const chapters = await getChaptersForMilestone(milestoneId)
+      console.log('[lg.getChaptersForMilestone] chapters:', chapters)
+      return chapters
     },
 
     async checkMigration() {

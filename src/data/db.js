@@ -1,7 +1,7 @@
 const DB_NAME    = 'lifeglance'
-const DB_VERSION = 4          // v4: eras store + mainTimelineVisibility on milestones
+const DB_VERSION = 5          // v5: rename eras store to chapters
 const STORE      = 'milestones'
-const ERAS       = 'eras'
+const CHAPTERS   = 'chapters'
 const MEDIA      = 'media'
 
 let _db = null
@@ -69,10 +69,12 @@ export function initDB() {
         }
       }
 
-      // v4 — eras store + mainTimelineVisibility field on milestones
+      // v4 — chapters store (originally 'eras') + mainTimelineVisibility field on milestones
       if (e.oldVersion < 4) {
-        if (!db.objectStoreNames.contains(ERAS)) {
-          db.createObjectStore(ERAS, { keyPath: 'id' })
+        // Fresh installs going straight to v5 skip this; v5 handles store creation.
+        // Installs upgrading from v3 get 'eras' here; v5 will migrate it to 'chapters'.
+        if (!db.objectStoreNames.contains('eras') && !db.objectStoreNames.contains(CHAPTERS)) {
+          db.createObjectStore('eras', { keyPath: 'id' })
         }
 
         const s = e.target.transaction.objectStore(STORE)
@@ -90,6 +92,24 @@ export function initDB() {
           c.continue()
         }
       }
+
+      // v5 — rename 'eras' store to 'chapters'
+      if (e.oldVersion < 5) {
+        if (!db.objectStoreNames.contains(CHAPTERS)) {
+          db.createObjectStore(CHAPTERS, { keyPath: 'id' })
+        }
+        // Copy records from legacy 'eras' store when upgrading from v4
+        if (db.objectStoreNames.contains('eras')) {
+          const src  = e.target.transaction.objectStore('eras')
+          const dest = e.target.transaction.objectStore(CHAPTERS)
+          src.openCursor().onsuccess = ev => {
+            const c = ev.target.result
+            if (!c) return
+            dest.put(c.value)
+            c.continue()
+          }
+        }
+      }
     }
 
     req.onsuccess = (e) => { _db = e.target.result; resolve(_db) }
@@ -105,8 +125,8 @@ function mediaTx(mode = 'readonly') {
   return _db.transaction(MEDIA, mode).objectStore(MEDIA)
 }
 
-function eraTx(mode = 'readonly') {
-  return _db.transaction(ERAS, mode).objectStore(ERAS)
+function chapterTx(mode = 'readonly') {
+  return _db.transaction(CHAPTERS, mode).objectStore(CHAPTERS)
 }
 
 // ── Milestones ───────────────────────────────────────────────────────────────
@@ -203,43 +223,43 @@ export function dbDeletePhoto(id) {
   })
 }
 
-// ── Eras ─────────────────────────────────────────────────────────────────────
+// ── Chapters ─────────────────────────────────────────────────────────────────
 
-export function dbGetAllEras() {
+export function dbGetAllChapters() {
   return new Promise((resolve, reject) => {
-    const req = eraTx().getAll()
+    const req = chapterTx().getAll()
     req.onsuccess = () => resolve(req.result)
     req.onerror   = () => reject(req.error)
   })
 }
 
-export function dbGetEra(id) {
+export function dbGetChapter(id) {
   return new Promise((resolve, reject) => {
-    const req = eraTx().get(id)
+    const req = chapterTx().get(id)
     req.onsuccess = () => resolve(req.result ?? null)
     req.onerror   = () => reject(req.error)
   })
 }
 
-export function dbAddEra(item) {
+export function dbAddChapter(item) {
   return new Promise((resolve, reject) => {
-    const req = eraTx('readwrite').add(item)
+    const req = chapterTx('readwrite').add(item)
     req.onsuccess = () => resolve(item)
     req.onerror   = () => reject(req.error)
   })
 }
 
-export function dbPutEra(item) {
+export function dbPutChapter(item) {
   return new Promise((resolve, reject) => {
-    const req = eraTx('readwrite').put(item)
+    const req = chapterTx('readwrite').put(item)
     req.onsuccess = () => resolve(item)
     req.onerror   = () => reject(req.error)
   })
 }
 
-export function dbDeleteEra(id) {
+export function dbDeleteChapter(id) {
   return new Promise((resolve, reject) => {
-    const req = eraTx('readwrite').delete(id)
+    const req = chapterTx('readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = () => reject(req.error)
   })
