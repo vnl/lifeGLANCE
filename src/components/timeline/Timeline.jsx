@@ -64,7 +64,7 @@ function wrapTitle(text, maxChars) {
 }
 
 const Timeline = forwardRef(function Timeline(
-  { milestones, chapters = [], zoom, textSize = 'normal', onMilestoneClick, onMilestoneDoubleClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick, clustering = true, birthday = '', newlyAddedId = null, ultraCompact = false },
+  { milestones, chapters = [], zoom, textSize = 'normal', onMilestoneClick, onMilestoneDoubleClick, onChapterDoubleClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick, clustering = true, birthday = '', newlyAddedId = null, ultraCompact = false },
   ref
 ) {
   const remPx = REM_PX[textSize] || 22
@@ -368,6 +368,7 @@ const Timeline = forwardRef(function Timeline(
                   onMouseEnter={e => setChapterTip({ chapter, x: e.clientX, y: e.clientY })}
                   onMouseLeave={() => setChapterTip(null)}
                   onMouseMove={e => setChapterTip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
+                  onDoubleClick={() => onChapterDoubleClick?.(chapter)}
                 >
                   {/* Bar body */}
                   <rect x={x1} y={barY} width={barW} height={barH}

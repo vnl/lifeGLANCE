@@ -15,7 +15,8 @@ import { ZOOM_LEVELS, applyRecurFilter } from '../../utils/timeline'
 import { expandAnnualDates } from '../../utils/recurrence'
 import { loadCategories } from '../../utils/colors'
 import { addMilestone, updateMilestone, deleteMilestone, restoreMilestones, uid } from '../../data/milestones'
-import { listChapters, restoreChapters } from '../../data/chapters'
+import { listChapters, restoreChapters, createChapter, updateChapter, deleteChapter } from '../../data/chapters'
+import ChapterSheet from '../chapter/ChapterSheet'
 import { dbPutMedia, dbPutPhoto, dbDeletePhoto, dbGetPhoto, dbPut } from '../../data/db'
 import { parseIcs }      from '../../utils/icsParser'
 import * as audio from '../../utils/audio'
@@ -81,8 +82,10 @@ export default function TimelineView({ milestones, setMilestones }) {
   )
   const [canUndo,       setCanUndo]       = useState(false)
   const [canRedo,       setCanRedo]       = useState(false)
-  const [chapters,      setChapters]      = useState([])
-  const [newlyAddedId,  setNewlyAddedId]  = useState(null)
+  const [chapters,         setChapters]         = useState([])
+  const [chapterSheetOpen, setChapterSheetOpen] = useState(false)
+  const [editChapter,      setEditChapter]      = useState(null)
+  const [newlyAddedId,     setNewlyAddedId]     = useState(null)
   const [summaryOpen,   setSummaryOpen]   = useState(false)
   const [onThisDayOpen, setOnThisDayOpen] = useState(false)
   const [icsImport,     setIcsImport]     = useState(null)  // { candidates, timedCount } | null
@@ -357,7 +360,7 @@ export default function TimelineView({ milestones, setMilestones }) {
   const keyStateRef = useRef(null)
   keyStateRef.current = {
     pastIdx, futureIdx, past, future, zoom,
-    addOpen, detail, settingsOpen, helpOpen, searchOpen,
+    addOpen, detail, settingsOpen, helpOpen, searchOpen, chapterSheetOpen,
     handlePastNav, handleFutureNav, handleJumpToToday, handleViewMode, closeSheet,
     handleUndo, handleRedo, canUndo, canRedo,
     clustering, setClustering,
@@ -374,7 +377,7 @@ export default function TimelineView({ milestones, setMilestones }) {
       }
       audio.init()   // unlock AudioContext on first keystroke (idempotent)
       const s = keyStateRef.current
-      const anyModal = s.addOpen || !!s.detail || s.settingsOpen || s.helpOpen || s.searchOpen
+      const anyModal = s.addOpen || !!s.detail || s.settingsOpen || s.helpOpen || s.searchOpen || s.chapterSheetOpen
 
       switch (e.key) {
         case 'ArrowLeft': {
@@ -515,11 +518,12 @@ export default function TimelineView({ milestones, setMilestones }) {
             customInputRef.current.blur()
             break
           }
-          if (s.detail)            setDetail(null)
-          else if (s.addOpen)      s.closeSheet()
-          else if (s.settingsOpen) setSettingsOpen(false)
-          else if (s.helpOpen)     setHelpOpen(false)
-          else if (s.searchOpen)   setSearchOpen(false)
+          if (s.detail)                setDetail(null)
+          else if (s.addOpen)          s.closeSheet()
+          else if (s.chapterSheetOpen) { setChapterSheetOpen(false); setEditChapter(null) }
+          else if (s.settingsOpen)     setSettingsOpen(false)
+          else if (s.helpOpen)         setHelpOpen(false)
+          else if (s.searchOpen)       setSearchOpen(false)
           break
         }
         default: break
@@ -672,6 +676,52 @@ export default function TimelineView({ milestones, setMilestones }) {
 
   function openEdit(m)  { setEditTarget(m); setAddOpen(true) }
   function closeSheet() { setAddOpen(false); setEditTarget(null) }
+
+  // ── Chapter CRUD ─────────────────────────────────────────────────────────────
+  function openChapterCreate() { setEditChapter(null); setChapterSheetOpen(true) }
+  function openChapterEdit(ch) { setEditChapter(ch);   setChapterSheetOpen(true) }
+  function closeChapterSheet() { setChapterSheetOpen(false); setEditChapter(null) }
+
+  async function handleChapterSave(data, existing) {
+    const startIso = new Date(data.start).toISOString()
+    const endIso   = new Date(data.end).toISOString()
+
+    if (existing) {
+      const updated = await updateChapter(
+        existing.id,
+        {
+          title:                  data.title,
+          start:                  startIso,
+          end:                    endIso,
+          color:                  data.color,
+          description:            data.description,
+          defaultMemberVisibility: data.defaultMemberVisibility,
+          milestoneIds:           data.milestoneIds,
+        },
+        existing,
+      )
+      setChapters(prev => prev.map(c => c.id === existing.id ? updated : c))
+    } else {
+      const chapter = await createChapter({
+        title:                  data.title,
+        start:                  data.start,
+        end:                    data.end,
+        color:                  data.color,
+        description:            data.description,
+        defaultMemberVisibility: data.defaultMemberVisibility,
+      })
+      // Set member milestones if any were selected
+      const final = data.milestoneIds.length > 0
+        ? await updateChapter(chapter.id, { milestoneIds: data.milestoneIds }, chapter)
+        : chapter
+      setChapters(prev => [...prev, final])
+    }
+  }
+
+  async function handleChapterDelete(id) {
+    await deleteChapter(id)
+    setChapters(prev => prev.filter(c => c.id !== id))
+  }
 
   // ── Export image ─────────────────────────────────────────────────────────────
   async function handleExportImage() {
@@ -1046,6 +1096,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             highlightedIds={highlightedIds}
             onMilestoneClick={handleMilestoneClick}
             onMilestoneDoubleClick={openEdit}
+            onChapterDoubleClick={openChapterEdit}
             panMs={panMs}
             onPanMs={setPanMs}
             viewMode={viewMode}
@@ -1088,6 +1139,9 @@ export default function TimelineView({ milestones, setMilestones }) {
       <div className="timeline-bottom">
         <button className="add-milestone-btn" onClick={() => setAddOpen(true)}>
           + add milestone
+        </button>
+        <button className="add-chapter-btn" onClick={openChapterCreate}>
+          + add chapter
         </button>
 
         {presentCategories.length > 0 && (
@@ -1152,6 +1206,15 @@ export default function TimelineView({ milestones, setMilestones }) {
         <AddMilestoneSheet
           onSave={handleSave} onClose={closeSheet} existing={editTarget}
           categories={categories}
+        />
+      )}
+      {chapterSheetOpen && (
+        <ChapterSheet
+          onSave={handleChapterSave}
+          onClose={closeChapterSheet}
+          onDelete={handleChapterDelete}
+          existing={editChapter}
+          milestones={milestones}
         />
       )}
       {detail && (
