@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react'
 import { DEFAULT_CATEGORIES } from '../../utils/colors'
 import { buildDateFromParts } from '../../utils/dates'
 import { dbGetPhoto } from '../../data/db'
+import { getMilestoneVisibility } from '../../utils/visibility'
 
 const MONTHS = [
   { v: '1',  l: 'Jan' }, { v: '2',  l: 'Feb' }, { v: '3',  l: 'Mar' },
@@ -10,7 +11,7 @@ const MONTHS = [
   { v: '10', l: 'Oct' }, { v: '11', l: 'Nov' }, { v: '12', l: 'Dec' },
 ]
 
-export default function AddMilestoneSheet({ onSave, onClose, existing, categories = DEFAULT_CATEGORIES }) {
+export default function AddMilestoneSheet({ onSave, onClose, existing, categories = DEFAULT_CATEGORIES, chapters = [], visibilityPrecomputed = { endpointChapterNames: new Map() }, drilledChapter = null }) {
   const isEdit = !!existing
 
   const [title,      setTitle]      = useState(existing?.title     ?? '')
@@ -33,9 +34,49 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
   const [mediaObjectUrl, setMediaObjectUrl] = useState(null) // transient preview URL
   const [recurrence,    setRecurrence]    = useState(false)
   const [recEndYear,    setRecEndYear]    = useState('')
+  const [visibility,    setVisibility]    = useState(existing?.mainTimelineVisibility ?? 'inherit')
   const [busy,          setBusy]          = useState(false)
   const photoRef = useRef(null)
   const mediaRef = useRef(null)
+
+  // Chapter membership suggestion (create mode only).
+  // Recomputes whenever the date changes; defaults the drilled chapter checked if it overlaps.
+  const overlappingChapters = React.useMemo(() => {
+    if (isEdit || year.length < 4) return []
+    const date = buildDateFromParts(month, year, precision, day)
+    if (!date) return []
+    return chapters.filter(ch => date >= new Date(ch.start) && date <= new Date(ch.end))
+  }, [isEdit, month, day, year, precision, chapters])
+
+  const [selectedChapterIds, setSelectedChapterIds] = React.useState(() => new Set())
+
+  // When the overlapping set changes, reset selection: check only the drilled chapter
+  // (if it overlaps), leave everything else unchecked.
+  React.useEffect(() => {
+    if (isEdit) return
+    const overlapIds = new Set(overlappingChapters.map(c => c.id))
+    setSelectedChapterIds(
+      drilledChapter && overlapIds.has(drilledChapter.id)
+        ? new Set([drilledChapter.id])
+        : new Set()
+    )
+  }, [overlappingChapters, drilledChapter, isEdit])
+
+  function toggleChapter(id) {
+    setSelectedChapterIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  // Compute visibility status for the edit-mode info panel. Re-runs when
+  // visibility setting changes (existing.date stays constant during a session).
+  const visInfo = React.useMemo(() => {
+    if (!isEdit || !existing) return null
+    const provisional = { ...existing, mainTimelineVisibility: visibility }
+    return getMilestoneVisibility(provisional, chapters, visibilityPrecomputed, 'main')
+  }, [isEdit, existing, visibility, chapters, visibilityPrecomputed])
 
   // Load existing photo blob from IndexedDB for edit mode
   React.useEffect(() => {
@@ -126,6 +167,8 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         mediaFile,
         mediaRemoved,
         url: url.trim(),
+        mainTimelineVisibility: visibility,
+        chapterIds: isEdit ? undefined : [...selectedChapterIds],
         recurrence: (!isEdit && recurrence) ? 'annual' : (existing?.recurrence ?? null),
         recurrence_id: existing?.recurrence_id ?? null,
         recurrenceEndYear: (!isEdit && recurrence && year.length >= 4)
@@ -405,6 +448,83 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         {isEdit && existing?.recurrence === 'annual' && (
           <div className="sheet-field">
             <div className="detail-recurrence-warn">↻ repeats annually — editing this instance only</div>
+          </div>
+        )}
+
+        {/* Visibility (edit mode only) */}
+        {isEdit && (
+          <div className="sheet-field">
+            <label className="field-label">main timeline visibility</label>
+
+            {/* Endpoint override notice — shown when a chapter's start/end anchors this milestone */}
+            {visInfo?.reason === 'endpoint' && (
+              <div className="vis-endpoint-notice">
+                <span className="vis-endpoint-icon">⚓</span>
+                <span>
+                  endpoint of {visInfo.endpointChapters.map(t => `'${t}'`).join(', ')} —
+                  always shown regardless of setting below
+                </span>
+              </div>
+            )}
+
+            {/* Three-way toggle: inherit / shown / hidden */}
+            <div className="vis-toggle-row">
+              {['inherit', 'shown', 'hidden'].map(v => (
+                <button
+                  key={v}
+                  type="button"
+                  className={`vis-tab${visibility === v ? ' active' : ''}`}
+                  onClick={() => setVisibility(v)}
+                >
+                  {v}
+                </button>
+              ))}
+            </div>
+
+            {/* Status line — explains the resolved behavior */}
+            {visInfo && (
+              <div className={`vis-status ${visInfo.visible ? 'vis-status-shown' : 'vis-status-hidden'}`}>
+                {visInfo.reason === 'endpoint' && (
+                  'shown (endpoint floor — overrides setting above)'
+                )}
+                {visInfo.reason === 'milestone-shown' && (
+                  'shown (set explicitly)'
+                )}
+                {visInfo.reason === 'milestone-hidden' && (
+                  'hidden (set explicitly)'
+                )}
+                {visInfo.reason === 'cascade-shown' && (
+                  `shown (inheriting — ${visInfo.inheritSource})`
+                )}
+                {visInfo.reason === 'cascade-hidden' && (
+                  `hidden (inheriting — ${visInfo.inheritSource})`
+                )}
+                {visInfo.reason === 'no-chapters' && (
+                  'shown (inheriting — not a member of any chapter)'
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Chapter membership suggestion — create mode only */}
+        {!isEdit && overlappingChapters.length > 0 && (
+          <div className="sheet-field">
+            <label className="field-label">add to chapters</label>
+            <div className="chapter-members-list">
+              {overlappingChapters.map(ch => (
+                <label key={ch.id} className="chapter-member-row">
+                  <input
+                    type="checkbox"
+                    className="chapter-member-check"
+                    checked={selectedChapterIds.has(ch.id)}
+                    onChange={() => toggleChapter(ch.id)}
+                  />
+                  <span className="chapter-member-dot" style={{ background: ch.color }} />
+                  <span className="chapter-member-title">{ch.title}</span>
+                </label>
+              ))}
+            </div>
           </div>
         )}
 

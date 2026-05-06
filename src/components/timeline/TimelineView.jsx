@@ -14,7 +14,10 @@ import TypewriterText    from '../ui/TypewriterText'
 import { ZOOM_LEVELS, applyRecurFilter } from '../../utils/timeline'
 import { expandAnnualDates } from '../../utils/recurrence'
 import { loadCategories } from '../../utils/colors'
+import { getMilestoneVisibility, precomputeEndpoints } from '../../utils/visibility'
 import { addMilestone, updateMilestone, deleteMilestone, restoreMilestones, uid } from '../../data/milestones'
+import { listChapters, restoreChapters, createChapter, updateChapter, deleteChapter } from '../../data/chapters'
+import ChapterSheet from '../chapter/ChapterSheet'
 import { dbPutMedia, dbPutPhoto, dbDeletePhoto, dbGetPhoto, dbPut } from '../../data/db'
 import { parseIcs }      from '../../utils/icsParser'
 import * as audio from '../../utils/audio'
@@ -28,12 +31,12 @@ const TEXT_SIZES = {
   bigger: '30px',
 }
 
-const ZOOM_ANIM_MS = 380
+const ZOOM_ANIM_MS = 420
 
 export default function TimelineView({ milestones, setMilestones }) {
   const [zoom,          setZoom]          = useState('years')
   const [zoomAnim,      setZoomAnim]      = useState('')
-  const [filter,        setFilter]        = useState('all')
+  const [filter,        setFilter]        = useState(new Set())
   const [addOpen,       setAddOpen]       = useState(false)
   const [editTarget,    setEditTarget]    = useState(null)
   const [detail,        setDetail]        = useState(null)
@@ -80,7 +83,12 @@ export default function TimelineView({ milestones, setMilestones }) {
   )
   const [canUndo,       setCanUndo]       = useState(false)
   const [canRedo,       setCanRedo]       = useState(false)
-  const [newlyAddedId,  setNewlyAddedId]  = useState(null)
+  const [chapters,         setChapters]         = useState([])
+  const [chapterSheetOpen, setChapterSheetOpen] = useState(false)
+  const [editChapter,      setEditChapter]      = useState(null)
+  const [drilledChapter,   setDrilledChapter]   = useState(null)
+  const predrillRef        = useRef(null) // { zoom, customYears, panMs } — ref avoids stale-closure issues
+  const [newlyAddedId,     setNewlyAddedId]     = useState(null)
   const [summaryOpen,   setSummaryOpen]   = useState(false)
   const [onThisDayOpen, setOnThisDayOpen] = useState(false)
   const [icsImport,     setIcsImport]     = useState(null)  // { candidates, timedCount } | null
@@ -144,6 +152,10 @@ export default function TimelineView({ milestones, setMilestones }) {
     return () => mq.removeEventListener('change', handler)
   }, [])
 
+  useEffect(() => {
+    listChapters().then(setChapters).catch(console.error)
+  }, [])
+
 
   // Restrict text size: big/bigger cards overflow the axis on short screens.
   useEffect(() => {
@@ -182,13 +194,33 @@ export default function TimelineView({ milestones, setMilestones }) {
     return () => el.removeEventListener('wheel', onWheel)
   }, [])
 
+  // ── Visibility precomputation ─────────────────────────────────────────────────
+  // Precompute endpoint data once per chapters change. This is O(chapters × members)
+  // and avoids re-scanning chapters for every milestone on every render.
+  const visibilityPrecomputed = React.useMemo(() => precomputeEndpoints(chapters), [chapters])
+
   // ── Filter ───────────────────────────────────────────────────────────────────
   const presentCategories = categories.filter(cat =>
     milestones.some(m => m.category === cat.id)
   )
   const hasRecurring = milestones.some(m => m.recurrence_id)
-  const categoryFiltered = filter === 'all' ? milestones : milestones.filter(m => m.category === filter)
-  const filteredMilestones = applyRecurFilter(categoryFiltered, recurFilter)
+  const categoryFiltered = filter.size === 0 ? milestones : milestones.filter(m => filter.has(m.category))
+
+  function toggleCategoryFilter(catId) {
+    setFilter(prev => {
+      const next = new Set(prev)
+      if (next.has(catId)) next.delete(catId)
+      else next.add(catId)
+      if (presentCategories.every(c => next.has(c.id))) return new Set()
+      return next
+    })
+  }
+  const recurFiltered = applyRecurFilter(categoryFiltered, recurFilter)
+  // Apply cascade visibility — hidden milestones are excluded entirely from the
+  // main timeline render (no layout space, not in the DOM, not hoverable).
+  const filteredMilestones = recurFiltered.filter(m =>
+    getMilestoneVisibility(m, chapters, visibilityPrecomputed, 'main').visible
+  )
 
   function cycleRecurFilter() {
     setRecurFilter(f => ({ next: 'all', all: 'past', past: 'future', future: 'next' }[f]))
@@ -351,10 +383,11 @@ export default function TimelineView({ milestones, setMilestones }) {
   const keyStateRef = useRef(null)
   keyStateRef.current = {
     pastIdx, futureIdx, past, future, zoom,
-    addOpen, detail, settingsOpen, helpOpen, searchOpen,
+    addOpen, detail, settingsOpen, helpOpen, searchOpen, chapterSheetOpen, drilledChapter,
     handlePastNav, handleFutureNav, handleJumpToToday, handleViewMode, closeSheet,
     handleUndo, handleRedo, canUndo, canRedo,
     clustering, setClustering,
+    exitDrillIn, openChapterCreate,
   }
 
   useEffect(() => {
@@ -368,7 +401,8 @@ export default function TimelineView({ milestones, setMilestones }) {
       }
       audio.init()   // unlock AudioContext on first keystroke (idempotent)
       const s = keyStateRef.current
-      const anyModal = s.addOpen || !!s.detail || s.settingsOpen || s.helpOpen || s.searchOpen
+      const anyModal = s.addOpen || !!s.detail || s.settingsOpen || s.helpOpen || s.searchOpen || s.chapterSheetOpen
+      const anyDrillIn = !!s.drilledChapter
 
       switch (e.key) {
         case 'ArrowLeft': {
@@ -413,9 +447,15 @@ export default function TimelineView({ milestones, setMilestones }) {
           handleExportImage()
           break
         }
-        case 'n': case 'N': {
+        case 'n': {
           if (s.settingsOpen || !!s.detail) break
           if (!s.addOpen) { e.preventDefault(); setAddOpen(true) }
+          break
+        }
+        case 'N': {
+          if (anyModal) break
+          e.preventDefault()
+          s.openChapterCreate()
           break
         }
         case 's': case 'S': {
@@ -507,13 +547,16 @@ export default function TimelineView({ milestones, setMilestones }) {
         case 'Escape': {
           if (customInputRef.current && document.activeElement === customInputRef.current) {
             customInputRef.current.blur()
-            break
+            if (!anyDrillIn) break
+            // If drilled in, fall through and exit drill-in after blurring the input.
           }
-          if (s.detail)            setDetail(null)
-          else if (s.addOpen)      s.closeSheet()
-          else if (s.settingsOpen) setSettingsOpen(false)
-          else if (s.helpOpen)     setHelpOpen(false)
-          else if (s.searchOpen)   setSearchOpen(false)
+          if (s.detail)                { setDetail(null); break }
+          if (s.addOpen)               { s.closeSheet(); break }
+          if (s.chapterSheetOpen)      { setChapterSheetOpen(false); setEditChapter(null); break }
+          if (s.settingsOpen)          { setSettingsOpen(false); break }
+          if (s.helpOpen)              { setHelpOpen(false); break }
+          if (s.searchOpen)            { setSearchOpen(false); break }
+          if (anyDrillIn)              { s.exitDrillIn(); break }
           break
         }
         default: break
@@ -542,7 +585,7 @@ export default function TimelineView({ milestones, setMilestones }) {
     // photoFile / photoRemoved / mediaFile / mediaRemoved are transfer-only fields
     // from the form — strip them before passing to the data layer and handle blob
     // persistence here.
-    const { mediaFile, mediaRemoved, photoFile, photoRemoved, ...milestoneData } = data
+    const { mediaFile, mediaRemoved, photoFile, photoRemoved, chapterIds, ...milestoneData } = data
     const newMediaType = mediaFile
       ? (mediaFile.type.startsWith('video/') ? 'video' : 'audio')
       : null
@@ -601,6 +644,20 @@ export default function TimelineView({ milestones, setMilestones }) {
         pushHistory(newMs)
         setMilestones(newMs)
         setNewlyAddedId(m.id)
+        // Add to any chapters the user selected in the form.
+        if (chapterIds?.length) {
+          const updated = [...chapters]
+          for (const chId of chapterIds) {
+            const idx = updated.findIndex(c => c.id === chId)
+            if (idx === -1 || updated[idx].milestoneIds.includes(m.id)) continue
+            updated[idx] = await updateChapter(
+              chId,
+              { milestoneIds: [...updated[idx].milestoneIds, m.id] },
+              updated[idx],
+            )
+          }
+          setChapters(updated)
+        }
         audio.playChime()
       }
     } catch (err) {
@@ -666,6 +723,108 @@ export default function TimelineView({ milestones, setMilestones }) {
 
   function openEdit(m)  { setEditTarget(m); setAddOpen(true) }
   function closeSheet() { setAddOpen(false); setEditTarget(null) }
+
+  // ── Chapter CRUD ─────────────────────────────────────────────────────────────
+  function openChapterCreate() { setEditChapter(null); setChapterSheetOpen(true) }
+  function openChapterEdit(ch) { setEditChapter(ch);   setChapterSheetOpen(true) }
+  function closeChapterSheet() { setChapterSheetOpen(false); setEditChapter(null) }
+
+  async function handleChapterSave(data, existing) {
+    const startIso = new Date(data.start).toISOString()
+    const endIso   = new Date(data.end).toISOString()
+
+    if (existing) {
+      const updated = await updateChapter(
+        existing.id,
+        {
+          title:                  data.title,
+          start:                  startIso,
+          end:                    endIso,
+          color:                  data.color,
+          description:            data.description,
+          defaultMemberVisibility: data.defaultMemberVisibility,
+          milestoneIds:           data.milestoneIds,
+        },
+        existing,
+      )
+      setChapters(prev => prev.map(c => c.id === existing.id ? updated : c))
+    } else {
+      const chapter = await createChapter({
+        title:                  data.title,
+        start:                  data.start,
+        end:                    data.end,
+        color:                  data.color,
+        description:            data.description,
+        defaultMemberVisibility: data.defaultMemberVisibility,
+      })
+      // Set member milestones if any were selected
+      const final = data.milestoneIds.length > 0
+        ? await updateChapter(chapter.id, { milestoneIds: data.milestoneIds }, chapter)
+        : chapter
+      setChapters(prev => [...prev, final])
+    }
+  }
+
+  async function handleChapterDelete(id) {
+    try {
+      await deleteChapter(id)
+    } catch (err) {
+      console.error('Failed to delete chapter:', err)
+      showToast('Failed to delete chapter. Please try again.')
+      return
+    }
+    setChapters(prev => prev.filter(c => c.id !== id))
+    if (drilledChapter?.id === id) exitDrillIn(true)
+  }
+
+  // ── Drill-in (Phase 5) ───────────────────────────────────────────────────────
+  function handleChapterClick(chapter) {
+    // Don't re-enter if already drilled — prevents overwriting the saved pre-drill state.
+    if (drilledChapter) return
+
+    // Save current view state in a ref so exitDrillIn always reads the latest value
+    // regardless of which render's closure calls it.
+    predrillRef.current = { zoom, customYears, panMs }
+
+    // Set drilledChapter immediately (before the animation) so that keyStateRef
+    // reflects the drilled state right away — this means ESC works during the
+    // enter animation rather than requiring a second press after it completes.
+    setDrilledChapter(chapter)
+    audio.playDrillIn()
+
+    // Compute zoom-to-fit: center on the chapter with 15% padding each side.
+    const startMs         = new Date(chapter.start).getTime()
+    const endMs           = new Date(chapter.end).getTime()
+    const chapterCenterMs = (startMs + endMs) / 2
+    const halfMs          = (endMs - startMs) / 2 * 1.15
+    const halfYears       = halfMs / (365.25 * 24 * 3600 * 1000)
+
+    setZoomAnim('zooming-in')
+    setTimeout(() => {
+      setZoom('custom')
+      setCustomYears(Math.max(0.1, halfYears))
+      setPanMs(chapterCenterMs - Date.now())
+      setZoomAnim('')
+    }, ZOOM_ANIM_MS)
+  }
+
+  function exitDrillIn(immediate = false) {
+    const restore = () => {
+      const saved = predrillRef.current
+      if (saved) {
+        setZoom(saved.zoom)
+        setCustomYears(saved.customYears)
+        setPanMs(saved.panMs)
+        predrillRef.current = null
+      }
+      setDrilledChapter(null)
+      setZoomAnim('')
+    }
+    if (immediate) { restore(); return }
+    audio.playDrillOut()
+    setZoomAnim('zooming-out')
+    setTimeout(restore, ZOOM_ANIM_MS)
+  }
 
   // ── Export image ─────────────────────────────────────────────────────────────
   async function handleExportImage() {
@@ -783,7 +942,8 @@ export default function TimelineView({ milestones, setMilestones }) {
       } catch { /* skip unreadable photo */ }
     }
 
-    const payload = { milestones, photos }
+    const chapters = await listChapters()
+    const payload = { milestones, photos, chapters }
     const json = JSON.stringify(payload, null, 2)
     const blob = new Blob([json], { type: 'application/json' })
     const url  = URL.createObjectURL(blob)
@@ -841,11 +1001,19 @@ export default function TimelineView({ milestones, setMilestones }) {
       const text   = await file.text()
       const parsed = JSON.parse(text)
 
-      // Support both legacy format (array) and new format ({ milestones, photos })
-      const items  = Array.isArray(parsed) ? parsed : (parsed.milestones ?? parsed)
-      const photos = (!Array.isArray(parsed) && parsed.photos) ? parsed.photos : {}
+      // Support legacy milestone-only format (plain array) and current format
+      // ({ milestones, photos, chapters }).  Backups with an 'eras' key instead of
+      // 'chapters' are from a pre-rename dev build and are not supported.
+      if (!Array.isArray(parsed) && Array.isArray(parsed.eras) && !Array.isArray(parsed.chapters)) {
+        throw new Error('This backup was created before the Chapters rename and cannot be imported. Please regenerate the backup from the app.')
+      }
+
+      const items    = Array.isArray(parsed) ? parsed : (parsed.milestones ?? parsed)
+      const photos   = (!Array.isArray(parsed) && parsed.photos) ? parsed.photos : {}
+      const chapters = (!Array.isArray(parsed) && Array.isArray(parsed.chapters)) ? parsed.chapters : []
 
       const restored = await restoreMilestones(items)
+      await restoreChapters(chapters)
 
       // Re-import photo blobs into the media store
       for (const m of restored) {
@@ -870,27 +1038,73 @@ export default function TimelineView({ milestones, setMilestones }) {
       }
 
       setMilestones([...restored])
+      setChapters([...chapters])
       historyRef.current = { stack: [[...restored]], idx: 0 }
       setCanUndo(false)
       setCanRedo(false)
     } catch (err) {
       console.error('Restore failed:', err)
+      showToast(err.message || 'Restore failed. The backup file may be invalid.')
     }
     e.target.value = ''
   }
 
+  // In drill-in mode: show only the drilled chapter's member milestones (hidden entirely,
+  // not dimmed) and only the drilled chapter's ribbon. The stat-panel highlights still
+  // apply among whichever members happen to be the next/prev highlighted milestone.
   const isEmpty = filteredMilestones.length === 0 && milestones.length === 0
-  const customHalfMs = customYears * 365.25 * 24 * 3600 * 1000
+  const customHalfMs  = customYears * 365.25 * 24 * 3600 * 1000
+  const drillMilestones = drilledChapter
+    ? milestones.filter(m => drilledChapter.milestoneIds.includes(m.id))
+    : filteredMilestones
+  const drillChapters   = drilledChapter ? [drilledChapter] : chapters
+  const drillHighlighted = highlightedIds
+
+  function fmtChapterDate(iso) {
+    return new Date(iso).toLocaleString('default', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+  }
 
   return (
     <div className="timeline-view">
       {/* ── Header ─────────────────────────────────────────────────────────── */}
-      <div className="timeline-header">
-        {/* Left: logo */}
-        <div className="logo logo-sm">
-          <span className="logo-life">life</span>
-          <span className="logo-glance">GLANCE</span>
-        </div>
+      <div
+        className="timeline-header"
+        style={drilledChapter ? { borderBottom: `1px solid ${drilledChapter.color}44` } : undefined}
+      >
+        {/* Left: logo / breadcrumb */}
+        {drilledChapter ? (
+          <div className="drill-breadcrumb" style={{ '--drill-color': drilledChapter.color }}>
+            <div className="drill-breadcrumb-nav">
+              <button className="drill-breadcrumb-life" onClick={() => exitDrillIn()}>
+                <span className="logo-life">life</span><span className="logo-glance">GLANCE</span>
+              </button>
+              <span className="drill-breadcrumb-sep">›</span>
+              <TypewriterText
+                key={drilledChapter.id}
+                text={drilledChapter.title}
+                options={{ delay: 42, jitter: 16 }}
+                showCursor={false}
+                hideCursorWhenDone
+                className="drill-breadcrumb-chapter"
+              />
+              <button className="drill-breadcrumb-close" onClick={() => exitDrillIn()} title="exit chapter view">✕</button>
+            </div>
+            <div className="drill-breadcrumb-meta">
+              <span>{fmtChapterDate(drilledChapter.start)} – {fmtChapterDate(drilledChapter.end)}</span>
+              <span className="drill-breadcrumb-dot">·</span>
+              <span>{drilledChapter.milestoneIds.length} member{drilledChapter.milestoneIds.length !== 1 ? 's' : ''}</span>
+              {drilledChapter.description && <>
+                <span className="drill-breadcrumb-dot">·</span>
+                <span className="drill-breadcrumb-desc">{drilledChapter.description}</span>
+              </>}
+            </div>
+          </div>
+        ) : (
+          <div className="logo logo-sm">
+            <span className="logo-life">life</span>
+            <span className="logo-glance">GLANCE</span>
+          </div>
+        )}
 
         {/* Center: zoom row + view picker */}
         <div className="header-center">
@@ -918,7 +1132,7 @@ export default function TimelineView({ milestones, setMilestones }) {
               {zoom === 'custom' && (
                 <div className="custom-zoom-row">
                   <span>±</span>
-                  <input ref={customInputRef} autoFocus
+                  <input ref={customInputRef} autoFocus={!drilledChapter}
                     className="custom-zoom-input" type="number" min="1" max="200"
                     value={customYears}
                     onChange={e => {
@@ -960,7 +1174,7 @@ export default function TimelineView({ milestones, setMilestones }) {
                   {zoom === 'custom' ? (
                     <div className="custom-zoom-row">
                       <span>±</span>
-                      <input ref={customInputRef} autoFocus
+                      <input ref={customInputRef} autoFocus={!drilledChapter}
                         className="custom-zoom-input" type="number" min="1" max="200"
                         value={customYears}
                         onChange={e => {
@@ -1018,16 +1232,22 @@ export default function TimelineView({ milestones, setMilestones }) {
           />
         )}
 
-        <div ref={zoomWrapRef} className={`timeline-zoom-wrap ${zoomAnim}`}>
+        <div
+          ref={zoomWrapRef}
+          className={`timeline-zoom-wrap ${zoomAnim}`}
+          style={drilledChapter ? { '--drill-color': drilledChapter.color } : undefined}
+        >
           <Timeline
             ref={timelineRef}
-            milestones={filteredMilestones}
+            milestones={drillMilestones}
+            chapters={drillChapters}
             zoom={zoom}
             textSize={textSize}
             customHalfMs={customHalfMs}
-            highlightedIds={highlightedIds}
+            highlightedIds={drillHighlighted}
             onMilestoneClick={handleMilestoneClick}
-            onMilestoneDoubleClick={openEdit}
+            onChapterClick={handleChapterClick}
+            onChapterDoubleClick={openChapterEdit}
             panMs={panMs}
             onPanMs={setPanMs}
             viewMode={viewMode}
@@ -1048,7 +1268,7 @@ export default function TimelineView({ milestones, setMilestones }) {
         )}
         {!isEmpty && filteredMilestones.length === 0 && (
           <div className="empty-state">
-            <div className="empty-state-label">no milestones in this category.</div>
+            <div className="empty-state-label">no milestones in {filter.size === 1 ? 'this category' : 'these categories'}.</div>
           </div>
         )}
       </div>
@@ -1057,6 +1277,7 @@ export default function TimelineView({ milestones, setMilestones }) {
       {!isEmpty && (
         <MinimapBar
           milestones={filteredMilestones}
+          chapters={chapters}
           panMs={panMs}
           onPanDirect={setPanMs}
           panToMs={(ms) => timelineRef.current?.panToMs(ms)}
@@ -1071,32 +1292,36 @@ export default function TimelineView({ milestones, setMilestones }) {
         <button className="add-milestone-btn" onClick={() => setAddOpen(true)}>
           + add milestone
         </button>
+        <button className="add-chapter-btn" onClick={openChapterCreate}>
+          + add chapter
+        </button>
 
         {presentCategories.length > 0 && (
           compactFilter ? (
             <div className="filter-compact" onClick={e => e.stopPropagation()}>
-              <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`}
-                onClick={() => { setFilter('all'); setFilterOpen(false) }}>all</button>
+              <button className={`filter-chip ${filter.size === 0 ? 'active' : ''}`}
+                onClick={() => { setFilter(new Set()); setFilterOpen(false) }}>all</button>
               <div className="filter-dropdown-wrap">
                 <button
-                  className={`filter-chip filter-dropdown-btn ${filter !== 'all' ? 'active' : ''}`}
+                  className={`filter-chip filter-dropdown-btn ${filter.size > 0 ? 'active' : ''}`}
                   onClick={() => setFilterOpen(o => !o)}>
-                  {filter !== 'all' ? (
+                  {filter.size === 1 ? (
                     <>
                       <span className="filter-dot"
-                        style={{ background: presentCategories.find(c => c.id === filter)?.color }} />
-                      {presentCategories.find(c => c.id === filter)?.label}
+                        style={{ background: presentCategories.find(c => filter.has(c.id))?.color }} />
+                      {presentCategories.find(c => filter.has(c.id))?.label}
                     </>
-                  ) : 'category'} ▾
+                  ) : filter.size > 1 ? `${filter.size} categories` : 'category'} ▾
                 </button>
                 {filterOpen && (
                   <div className="filter-dropdown">
                     {presentCategories.map(cat => (
                       <button key={cat.id}
-                        className={`filter-dropdown-item ${filter === cat.id ? 'active' : ''}`}
-                        onClick={() => { setFilter(cat.id); setFilterOpen(false) }}>
+                        className={`filter-dropdown-item ${filter.has(cat.id) ? 'active' : ''}`}
+                        onClick={() => toggleCategoryFilter(cat.id)}>
                         <span className="filter-dot" style={{ background: cat.color }} />
                         {cat.label}
+                        {filter.has(cat.id) && <span className="filter-check">✓</span>}
                       </button>
                     ))}
                   </div>
@@ -1105,12 +1330,12 @@ export default function TimelineView({ milestones, setMilestones }) {
             </div>
           ) : (
             <div className="filter-chips-inline">
-              <button className={`filter-chip ${filter === 'all' ? 'active' : ''}`}
-                onClick={() => setFilter('all')}>all</button>
+              <button className={`filter-chip ${filter.size === 0 ? 'active' : ''}`}
+                onClick={() => setFilter(new Set())}>all</button>
               {presentCategories.map(cat => (
                 <button key={cat.id}
-                  className={`filter-chip ${filter === cat.id ? 'active' : ''}`}
-                  onClick={() => setFilter(filter === cat.id ? 'all' : cat.id)}>
+                  className={`filter-chip ${filter.has(cat.id) ? 'active' : ''}`}
+                  onClick={() => toggleCategoryFilter(cat.id)}>
                   <span className="filter-dot" style={{ background: cat.color }} />
                   {cat.label}
                 </button>
@@ -1134,6 +1359,18 @@ export default function TimelineView({ milestones, setMilestones }) {
         <AddMilestoneSheet
           onSave={handleSave} onClose={closeSheet} existing={editTarget}
           categories={categories}
+          chapters={chapters}
+          visibilityPrecomputed={visibilityPrecomputed}
+          drilledChapter={drilledChapter}
+        />
+      )}
+      {chapterSheetOpen && (
+        <ChapterSheet
+          onSave={handleChapterSave}
+          onClose={closeChapterSheet}
+          onDelete={handleChapterDelete}
+          existing={editChapter}
+          milestones={milestones}
         />
       )}
       {detail && (
@@ -1149,6 +1386,7 @@ export default function TimelineView({ milestones, setMilestones }) {
       {searchOpen && (
         <SearchModal
           milestones={milestones}
+          chapters={chapters}
           onSelect={handleSearchSelect}
           onClose={() => setSearchOpen(false)}
         />

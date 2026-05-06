@@ -9,6 +9,35 @@ import { dbGetMedia } from '../../data/db'
 // Map text-size labels → root px value (must match TimelineView TEXT_SIZES)
 const REM_PX = { small: 19, normal: 22, big: 26, bigger: 30 }
 
+// ── Chapter helpers ───────────────────────────────────────────────────────────
+
+// Greedy interval-graph colouring: assigns each chapter the lowest row index that
+// doesn't conflict with an already-placed chapter in the same row.
+function assignChapterRows(chapters) {
+  const sorted = [...chapters].sort((a, b) => new Date(a.start) - new Date(b.start))
+  const rowEnds = [] // rowEnds[i] = end-time of the last chapter placed in row i
+  return sorted.map(chapter => {
+    const s = new Date(chapter.start).getTime()
+    const e = new Date(chapter.end).getTime()
+    let row = rowEnds.findIndex(end => end <= s)
+    if (row === -1) { row = rowEnds.length; rowEnds.push(e) }
+    else rowEnds[row] = e
+    return { ...chapter, _row: row }
+  })
+}
+
+// Human-readable duration string, e.g. "4y 2mo" or "8mo".
+function chapterSpan(startIso, endIso) {
+  const s = new Date(startIso), e = new Date(endIso)
+  const totalMonths = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth())
+  const yrs = Math.floor(totalMonths / 12)
+  const mos = totalMonths % 12
+  if (yrs > 0 && mos > 0) return `${yrs}y ${mos}mo`
+  if (yrs > 0)             return `${yrs}y`
+  if (mos > 0)             return `${mos}mo`
+  return '< 1mo'
+}
+
 // Word-wrap title to at most 2 lines given a max-chars-per-line limit.
 // Courier Prime is monospace so char-count is a reliable width proxy.
 function wrapTitle(text, maxChars) {
@@ -35,7 +64,7 @@ function wrapTitle(text, maxChars) {
 }
 
 const Timeline = forwardRef(function Timeline(
-  { milestones, zoom, textSize = 'normal', onMilestoneClick, onMilestoneDoubleClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick, clustering = true, birthday = '', newlyAddedId = null, ultraCompact = false },
+  { milestones, chapters = [], zoom, textSize = 'normal', onMilestoneClick, onChapterClick, onChapterDoubleClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick, clustering = true, birthday = '', newlyAddedId = null, ultraCompact = false },
   ref
 ) {
   const remPx = REM_PX[textSize] || 22
@@ -59,14 +88,17 @@ const Timeline = forwardRef(function Timeline(
     () => window.matchMedia('(max-height: 900px)').matches
   )
   const [photoTip,    setPhotoTip]    = useState(null) // { uri, x, y }
+  const [chapterTip,  setChapterTip]  = useState(null) // { chapter, x, y } | null
   const [playingId,   setPlayingId]   = useState(null)
   const audioElRef = useRef(null)
   // Track which IDs have already played their fly-in so we don't re-animate on re-renders
   const [flyDoneIds,  setFlyDoneIds]  = useState(() => new Set())
   // panMsRef always tracks the latest value for animation calculations
-  const panMsRef = useRef(panMs)
-  const animRef  = useRef(null)
-  const drag     = useRef({ active: false, startX: 0, startPan: 0 })
+  const panMsRef        = useRef(panMs)
+  const animRef         = useRef(null)
+  const drag            = useRef({ active: false, startX: 0, startPan: 0 })
+  // Distinguishes single-click (drill-in) from double-click (edit) on chapter ribbons.
+  const chapterClickTimer = useRef(null)
 
   // Track viewport height for compact layout (axis shift + all-above)
   useEffect(() => {
@@ -163,17 +195,38 @@ const Timeline = forwardRef(function Timeline(
   const axisY = compactLayout
     ? Math.max(193, h - 40)
     : Math.round(h * 0.50)
+
+  // ── Chapter band: sits between milestones and the time axis ─────────────
+  // CHAPTER_ROW_H scales with text size so the band feels proportional.
+  const CHAPTER_ROW_H    = Math.round(remPx * 0.62)  // ~14px at normal (22px rem)
+  const CHAPTER_ROW_GAP  = 2                           // px gap between stacked rows
+  const CHAPTER_BAND_PAD = 4                           // top + bottom padding inside band
+
+  const chaptersWithRows = assignChapterRows(chapters)
+  const numChapterRows   = chaptersWithRows.length > 0
+    ? Math.max(...chaptersWithRows.map(c => c._row)) + 1 : 0
+  const chaptersBandH    = numChapterRows > 0
+    ? CHAPTER_BAND_PAD + numChapterRows * CHAPTER_ROW_H + (numChapterRows - 1) * CHAPTER_ROW_GAP + CHAPTER_BAND_PAD
+    : 0
+
+  // Milestones (above-axis) connect to msAxisY; the chapter band fills [msAxisY, axisY].
+  // Below-axis (future) milestones still connect to axisY directly.
+  const msAxisY = axisY - chaptersBandH
+
+  // ─────────────────────────────────────────────────────────────────────────
+
   const today    = new Date()
   const centerMs = today.getTime() + panMs
   const { startMs, endMs } = getTimeRangeForView(zoom, centerMs, viewMode, customHalfMs)
   const ticks    = getTickMarks(zoom, startMs, endMs, w)
   const todayX   = dateToX(today.getTime(), startMs, endMs, w)
   const msPerPx  = getMsPerPx(zoom, w, customHalfMs)
+  const daysPerPx = msPerPx / 86400000
   // In compact mode: reserve 120px from the top for the today label, and
   // cluster milestones more aggressively to reduce card pile-up near today.
   const TOP_RESERVE        = compactLayout ? 120 : 16
   const CLUSTER_THRESHOLD  = CARD_W * (compactLayout ? 0.6 : 0.4)
-  const maxLane  = Math.max(0, Math.floor((axisY - MAX_CONN - CARD_H2 - TOP_RESERVE) / CARD_STEP))
+  const maxLane  = Math.max(0, Math.floor((msAxisY - MAX_CONN - CARD_H2 - TOP_RESERVE) / CARD_STEP))
 
   const sorted = [...milestones].sort((a, b) => new Date(a.date) - new Date(b.date))
   const groups = []
@@ -273,6 +326,115 @@ const Timeline = forwardRef(function Timeline(
         <line x1={0} y1={axisY} x2={w} y2={axisY}
           stroke="rgba(232,224,208,0.18)" strokeWidth={1} />
 
+        {/* ── Chapter ribbon band ──────────────────────────────────────────── */}
+        {chaptersBandH > 0 && (
+          <g>
+            {/* Subtle band background to give the band visual definition */}
+            <rect x={0} y={msAxisY} width={w} height={chaptersBandH}
+              fill="rgba(232,224,208,0.016)" />
+            {/* Top separator: visual boundary between milestone cards and band */}
+            <line x1={0} y1={msAxisY} x2={w} y2={msAxisY}
+              stroke="rgba(232,224,208,0.08)" strokeWidth={1} />
+
+            {chaptersWithRows.map(chapter => {
+              const chapterStartX = dateToX(new Date(chapter.start).getTime(), startMs, endMs, w)
+              const chapterEndX   = dateToX(new Date(chapter.end).getTime(),   startMs, endMs, w)
+
+              // Skip chapters that are entirely off-screen
+              if (chapterEndX < -10 || chapterStartX > w + 10) return null
+
+              // Clamp visible portion to viewport
+              const x1   = Math.max(0, chapterStartX)
+              const x2   = Math.min(w, chapterEndX)
+              const barW = x2 - x1
+              if (barW < 1) return null
+
+              const barY = msAxisY + CHAPTER_BAND_PAD + chapter._row * (CHAPTER_ROW_H + CHAPTER_ROW_GAP)
+              const barH = CHAPTER_ROW_H
+
+              // Label truncation: Courier Prime is monospace.
+              // At 0.45em, char width ≈ remPx * 0.45 * 0.60 px
+              const labelFontPx  = remPx * 0.45
+              const labelCharW   = labelFontPx * 0.60
+              const labelMaxCh   = Math.floor((barW - 14) / labelCharW)
+              const labelText    = labelMaxCh > 2
+                ? (chapter.title.length <= labelMaxCh ? chapter.title : chapter.title.slice(0, labelMaxCh - 1) + '…')
+                : ''
+
+              const startYear = new Date(chapter.start).getFullYear()
+              const endYear   = new Date(chapter.end).getFullYear()
+
+              return (
+                <g key={chapter.id}
+                  style={{ cursor: 'pointer' }}
+                  onMouseEnter={e => setChapterTip({ chapter, x: e.clientX, y: e.clientY })}
+                  onMouseLeave={() => setChapterTip(null)}
+                  onMouseMove={e => setChapterTip(t => t ? { ...t, x: e.clientX, y: e.clientY } : null)}
+                  onClick={() => {
+                    // Clear any previous timer before setting a new one — a double-click
+                    // fires onClick twice, and without this the first timer survives even
+                    // after onDoubleClick clears the second one.
+                    clearTimeout(chapterClickTimer.current)
+                    chapterClickTimer.current = setTimeout(() => onChapterClick?.(chapter), 250)
+                  }}
+                  onDoubleClick={() => {
+                    clearTimeout(chapterClickTimer.current)
+                    onChapterDoubleClick?.(chapter)
+                  }}
+                >
+                  {/* Bar body */}
+                  <rect x={x1} y={barY} width={barW} height={barH}
+                    fill={chapter.color} fillOpacity={0.18}
+                    stroke={chapter.color} strokeOpacity={0.32} strokeWidth={0.5}
+                    rx={2} />
+
+                  {/* Left-edge accent stripe — only when the chapter start is on-screen */}
+                  {chapterStartX >= 0 && chapterStartX < w && (
+                    <rect x={chapterStartX} y={barY} width={2} height={barH}
+                      fill={chapter.color} opacity={0.85} rx={1} />
+                  )}
+
+                  {/* Title label — years zoom or closer, and bar at least 7% of viewport */}
+                  {daysPerPx < 6.0 && barW >= w * 0.07 && labelText && (
+                    <text
+                      x={(x1 + x2) / 2}
+                      textAnchor="middle"
+                      y={barY + Math.round(barH * 0.73)}
+                      fill={chapter.color}
+                      fontSize="0.45em"
+                      fontFamily="'Courier Prime', monospace"
+                      opacity={0.9}
+                    >{labelText}</text>
+                  )}
+
+                  {/* Start/end year markers — months zoom or closer, bar at least 45% of viewport */}
+                  {daysPerPx < 0.8 && barW >= w * 0.45 && chapterStartX >= 4 && (
+                    <text
+                      x={chapterStartX + 4}
+                      y={barY + barH - 2}
+                      fill={chapter.color}
+                      fontSize="0.38em"
+                      fontFamily="'Courier Prime', monospace"
+                      opacity={0.60}
+                    >{startYear}</text>
+                  )}
+                  {daysPerPx < 0.8 && barW >= w * 0.45 && chapterEndX <= w - 4 && (
+                    <text
+                      x={chapterEndX - 4}
+                      y={barY + barH - 2}
+                      textAnchor="end"
+                      fill={chapter.color}
+                      fontSize="0.38em"
+                      fontFamily="'Courier Prime', monospace"
+                      opacity={0.60}
+                    >{endYear}</text>
+                  )}
+                </g>
+              )
+            })}
+          </g>
+        )}
+
         {/* ── Today marker ────────────────────────────────────────────────── */}
         {todayX > -10 && todayX < w + 10 && (() => {
           const tDay     = today.toLocaleDateString('en-US', { weekday: 'long'  }).toLowerCase()
@@ -331,9 +493,9 @@ const Timeline = forwardRef(function Timeline(
 
           let cardY, connY1, connY2
           if (m.above) {
-            cardY  = axisY - connLen - m.lane * CARD_STEP - cardH
+            cardY  = msAxisY - connLen - m.lane * CARD_STEP - cardH
             cardY  = Math.max(84, cardY) // never overlap the today label (goes to ~y=68)
-            connY1 = axisY - 4
+            connY1 = msAxisY - 4
             connY2 = cardY + cardH
           } else {
             cardY  = axisY + connLen + m.lane * CARD_STEP
@@ -368,12 +530,13 @@ const Timeline = forwardRef(function Timeline(
           const todayOnScreen = todayX >= 0 && todayX <= w
           const isFlying = m.id === newlyAddedId && !flyDoneIds.has(m.id) && todayOnScreen
           const flew     = flyDoneIds.has(m.id)
+          const mAxisY = m.above ? msAxisY : axisY
           const innerAnimStyle = flew ? { animation: 'none' } : {
             animation:        isFlying
               ? 'milestone-fly 0.65s cubic-bezier(0.34,1.56,0.64,1) both'
               : 'milestone-appear 0.45s cubic-bezier(0.22,1,0.36,1) both',
             animationDelay:   isFlying ? '0ms' : `${i * 28}ms`,
-            transformOrigin:  isFlying ? `${todayX}px ${axisY}px` : `${x}px ${axisY}px`,
+            transformOrigin:  isFlying ? `${todayX}px ${mAxisY}px` : `${x}px ${mAxisY}px`,
           }
           // Stem fades in sync with the card but without scaling (it stays on the axis)
           const stemAnimStyle = flew ? {} : {
@@ -384,10 +547,10 @@ const Timeline = forwardRef(function Timeline(
           }
 
           return (
-            <g key={m.id} onClick={(e) => { if (e.detail >= 2) onMilestoneDoubleClick?.(m); else onMilestoneClick(m) }} opacity={alpha} style={{ cursor: 'pointer' }}>
+            <g key={m.id} onClick={() => onMilestoneClick(m)} opacity={alpha} style={{ cursor: 'pointer' }}>
               {/* Dot and connector: not inside the scale group so they stay on the axis */}
               <g style={stemAnimStyle}>
-                <circle cx={x} cy={axisY}
+                <circle cx={x} cy={m.above ? msAxisY : axisY}
                   r={isHL ? 5.5 : 3.5}
                   fill={m.color}
                   opacity={isHL ? 1 : 0.85} />
@@ -574,16 +737,16 @@ const Timeline = forwardRef(function Timeline(
           const clCenterMs = group.reduce((s, m) => s + new Date(m.date).getTime(), 0) / count
 
           const R      = 11
-          const badgeCy = axisY - R - 10
+          const badgeCy = msAxisY - R - 10
 
           return (
             <g key={`cl-${idx}`} style={{ cursor: 'pointer' }}
                onClick={() => onClusterClick?.(clCenterMs)}>
               {/* Dashed connector */}
-              <line x1={avgX} y1={axisY - 5} x2={avgX} y2={badgeCy + R}
+              <line x1={avgX} y1={msAxisY - 5} x2={avgX} y2={badgeCy + R}
                 stroke="rgba(200,169,110,0.22)" strokeWidth={1} strokeDasharray="2 3" />
               {/* Axis dot */}
-              <circle cx={avgX} cy={axisY} r={5}
+              <circle cx={avgX} cy={msAxisY} r={5}
                 fill="#0D0F16" stroke="rgba(200,169,110,0.55)" strokeWidth={1.2} />
               {/* Badge circle */}
               <circle cx={avgX} cy={badgeCy} r={R}
@@ -635,6 +798,30 @@ const Timeline = forwardRef(function Timeline(
             border: '1px solid rgba(200,169,110,0.35)',
             boxShadow: '0 6px 24px rgba(0,0,0,0.7)',
           }} />
+        </div>
+      )}
+
+      {chapterTip && (
+        <div style={{
+          position:      'fixed',
+          left:          chapterTip.x,
+          top:           chapterTip.y,
+          transform:     'translate(-50%, calc(-100% - 10px))',
+          pointerEvents: 'none',
+          zIndex:        9999,
+          background:    'rgba(13,15,22,0.95)',
+          border:        `1px solid ${chapterTip.chapter.color}55`,
+          borderLeft:    `2px solid ${chapterTip.chapter.color}`,
+          padding:       '5px 9px',
+          fontFamily:    "'Courier Prime', monospace",
+          whiteSpace:    'nowrap',
+        }}>
+          <div style={{ fontSize: '0.65rem', color: chapterTip.chapter.color, fontWeight: 'bold' }}>
+            {chapterTip.chapter.title}
+          </div>
+          <div style={{ fontSize: '0.55rem', color: 'rgba(232,224,208,0.55)', marginTop: 2 }}>
+            {chapterSpan(chapterTip.chapter.start, chapterTip.chapter.end)}
+          </div>
         </div>
       )}
     </div>

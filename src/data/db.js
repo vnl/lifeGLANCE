@@ -1,6 +1,7 @@
 const DB_NAME    = 'lifeglance'
-const DB_VERSION = 3          // v3: photos migrated from data-URI to media blob store
+const DB_VERSION = 5          // v5: rename eras store to chapters
 const STORE      = 'milestones'
+const CHAPTERS   = 'chapters'
 const MEDIA      = 'media'
 
 let _db = null
@@ -67,6 +68,45 @@ export function initDB() {
           c.continue()
         }
       }
+
+      // v4 — mainTimelineVisibility field added to milestones
+      // Note: the 'eras' store was also created here originally, but that store name
+      // was renamed to 'chapters' in v5. The store creation is handled entirely by the
+      // v5 block below for all install paths (fresh install and upgrades alike).
+      if (e.oldVersion < 4) {
+        const s = e.target.transaction.objectStore(STORE)
+        let migratedCount = 0
+        s.openCursor().onsuccess = ev => {
+          const c = ev.target.result
+          if (!c) {
+            console.log(`[lifeGLANCE v4 migration] mainTimelineVisibility added to ${migratedCount} milestone(s)`)
+            return
+          }
+          if (!('mainTimelineVisibility' in c.value)) {
+            c.update({ ...c.value, mainTimelineVisibility: 'inherit' })
+            migratedCount++
+          }
+          c.continue()
+        }
+      }
+
+      // v5 — 'chapters' store (renamed from 'eras' in the Chapters feature rename)
+      if (e.oldVersion < 5) {
+        if (!db.objectStoreNames.contains(CHAPTERS)) {
+          db.createObjectStore(CHAPTERS, { keyPath: 'id' })
+        }
+        // Copy records from legacy 'eras' store for installs upgrading from v4
+        if (db.objectStoreNames.contains('eras')) {
+          const src  = e.target.transaction.objectStore('eras')
+          const dest = e.target.transaction.objectStore(CHAPTERS)
+          src.openCursor().onsuccess = ev => {
+            const c = ev.target.result
+            if (!c) return
+            dest.put(c.value)
+            c.continue()
+          }
+        }
+      }
     }
 
     req.onsuccess = (e) => { _db = e.target.result; resolve(_db) }
@@ -80,6 +120,10 @@ function tx(mode = 'readonly') {
 
 function mediaTx(mode = 'readonly') {
   return _db.transaction(MEDIA, mode).objectStore(MEDIA)
+}
+
+function chapterTx(mode = 'readonly') {
+  return _db.transaction(CHAPTERS, mode).objectStore(CHAPTERS)
 }
 
 // ── Milestones ───────────────────────────────────────────────────────────────
@@ -171,6 +215,48 @@ export function dbGetPhoto(id) {
 export function dbDeletePhoto(id) {
   return new Promise((resolve, reject) => {
     const req = mediaTx('readwrite').delete(`${id}-photo`)
+    req.onsuccess = () => resolve()
+    req.onerror   = () => reject(req.error)
+  })
+}
+
+// ── Chapters ─────────────────────────────────────────────────────────────────
+
+export function dbGetAllChapters() {
+  return new Promise((resolve, reject) => {
+    const req = chapterTx().getAll()
+    req.onsuccess = () => resolve(req.result)
+    req.onerror   = () => reject(req.error)
+  })
+}
+
+export function dbGetChapter(id) {
+  return new Promise((resolve, reject) => {
+    const req = chapterTx().get(id)
+    req.onsuccess = () => resolve(req.result ?? null)
+    req.onerror   = () => reject(req.error)
+  })
+}
+
+export function dbAddChapter(item) {
+  return new Promise((resolve, reject) => {
+    const req = chapterTx('readwrite').add(item)
+    req.onsuccess = () => resolve(item)
+    req.onerror   = () => reject(req.error)
+  })
+}
+
+export function dbPutChapter(item) {
+  return new Promise((resolve, reject) => {
+    const req = chapterTx('readwrite').put(item)
+    req.onsuccess = () => resolve(item)
+    req.onerror   = () => reject(req.error)
+  })
+}
+
+export function dbDeleteChapter(id) {
+  return new Promise((resolve, reject) => {
+    const req = chapterTx('readwrite').delete(id)
     req.onsuccess = () => resolve()
     req.onerror   = () => reject(req.error)
   })
