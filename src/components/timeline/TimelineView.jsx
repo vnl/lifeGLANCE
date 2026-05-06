@@ -31,7 +31,7 @@ const TEXT_SIZES = {
   bigger: '30px',
 }
 
-const ZOOM_ANIM_MS = 380
+const ZOOM_ANIM_MS = 420
 
 export default function TimelineView({ milestones, setMilestones }) {
   const [zoom,          setZoom]          = useState('years')
@@ -387,7 +387,7 @@ export default function TimelineView({ milestones, setMilestones }) {
     handlePastNav, handleFutureNav, handleJumpToToday, handleViewMode, closeSheet,
     handleUndo, handleRedo, canUndo, canRedo,
     clustering, setClustering,
-    exitDrillIn,
+    exitDrillIn, openChapterCreate,
   }
 
   useEffect(() => {
@@ -447,9 +447,15 @@ export default function TimelineView({ milestones, setMilestones }) {
           handleExportImage()
           break
         }
-        case 'n': case 'N': {
+        case 'n': {
           if (s.settingsOpen || !!s.detail) break
           if (!s.addOpen) { e.preventDefault(); setAddOpen(true) }
+          break
+        }
+        case 'N': {
+          if (anyModal) break
+          e.preventDefault()
+          s.openChapterCreate()
           break
         }
         case 's': case 'S': {
@@ -760,9 +766,14 @@ export default function TimelineView({ milestones, setMilestones }) {
   }
 
   async function handleChapterDelete(id) {
-    await deleteChapter(id)
+    try {
+      await deleteChapter(id)
+    } catch (err) {
+      console.error('Failed to delete chapter:', err)
+      showToast('Failed to delete chapter. Please try again.')
+      return
+    }
     setChapters(prev => prev.filter(c => c.id !== id))
-    // If the deleted chapter is currently drilled into, exit drill-in immediately.
     if (drilledChapter?.id === id) exitDrillIn(true)
   }
 
