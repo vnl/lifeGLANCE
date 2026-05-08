@@ -1,5 +1,6 @@
 services:
   pocketbase:
+    image: ${LIFEGLANCE_PB_IMAGE:-ghcr.io/vnl/lifeglance-pb:latest}
     build: ./pocketbase
     restart: unless-stopped
     volumes:
@@ -11,6 +12,7 @@ services:
       retries: 5
 
   lifeglance:
+    image: ${LIFEGLANCE_IMAGE:-ghcr.io/vnl/lifeglance:latest}
     build: .
     restart: unless-stopped
     ports:
