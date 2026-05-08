@@ -47,8 +47,8 @@ jobs:
           push: true
           tags: ${{ steps.app-meta.outputs.tags }}
           labels: ${{ steps.app-meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=app
+          cache-to: type=gha,mode=max,scope=app
 
       - name: PocketBase image metadata
         id: pb-meta
@@ -67,5 +67,5 @@ jobs:
           push: true
           tags: ${{ steps.pb-meta.outputs.tags }}
           labels: ${{ steps.pb-meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=pb
+          cache-to: type=gha,mode=max,scope=pb
