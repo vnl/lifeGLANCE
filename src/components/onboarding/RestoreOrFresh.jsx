@@ -23,6 +23,7 @@ export default function RestoreOrFresh({ onRestoreComplete, onStartFresh }) {
   }
 
   async function handleConfirm() {
+    setError(null)
     setPhase('importing')
     try {
       const result = await importBackup(preview)
