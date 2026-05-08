@@ -9,7 +9,7 @@ vi.mock('../data/pb.js', () => ({
 }))
 
 import pb from '../data/pb.js'
-import { initDB, dbGetAll, dbAdd, dbPut, dbDelete, dbGetAllChapters, dbGetChapter, dbAddChapter, dbPutChapter, dbDeleteChapter } from '../data/db.js'
+import { initDB, dbGetAll, dbAdd, dbPut, dbDelete, dbGetAllChapters, dbGetChapter, dbAddChapter, dbPutChapter, dbDeleteChapter, dbPutMedia, dbGetMedia, dbClearAllMedia, dbPutPhoto, dbGetPhoto, dbDeletePhoto } from '../data/db.js'
 
 function makeMockCollection(overrides = {}) {
   return {
@@ -166,5 +166,58 @@ describe('dbDeleteChapter', () => {
     pb.collection.mockReturnValue(col)
     await dbDeleteChapter('ch1')
     expect(col.delete).toHaveBeenCalledWith('ch1')
+  })
+})
+
+describe('dbClearAllMedia', () => {
+  it('is a no-op — resolves without throwing', async () => {
+    await expect(dbClearAllMedia()).resolves.toBeUndefined()
+  })
+})
+
+describe('dbPutPhoto', () => {
+  it('calls update with FormData containing photo blob', async () => {
+    const col = makeMockCollection({ update: vi.fn().mockResolvedValue({ id: 'ms1', collectionId: 'x', collectionName: 'milestones' }) })
+    pb.collection.mockReturnValue(col)
+    const blob = new Blob(['img'], { type: 'image/jpeg' })
+    await dbPutPhoto('ms1', blob, 'image/jpeg')
+    expect(col.update).toHaveBeenCalledWith('ms1', expect.any(FormData))
+  })
+})
+
+describe('dbGetPhoto', () => {
+  it('returns null when record has no photo', async () => {
+    const col = makeMockCollection({ getOne: vi.fn().mockResolvedValue({ id: 'ms1', photo: null, collectionId: 'x', collectionName: 'milestones' }) })
+    pb.collection.mockReturnValue(col)
+    const result = await dbGetPhoto('ms1')
+    expect(result).toBeNull()
+  })
+})
+
+describe('dbDeletePhoto', () => {
+  it('clears photo field via update', async () => {
+    const col = makeMockCollection({ update: vi.fn().mockResolvedValue({ id: 'ms1', collectionId: 'x', collectionName: 'milestones' }) })
+    pb.collection.mockReturnValue(col)
+    await dbDeletePhoto('ms1')
+    expect(col.update).toHaveBeenCalledWith('ms1', expect.objectContaining({ 'photo': '' }))
+  })
+})
+
+describe('dbPutMedia', () => {
+  it('uploads audio/video blob via FormData', async () => {
+    const col = makeMockCollection({ update: vi.fn().mockResolvedValue({ id: 'ms1', collectionId: 'x', collectionName: 'milestones' }) })
+    pb.collection.mockReturnValue(col)
+    const blob = new Blob(['data'], { type: 'audio/mp3' })
+    await dbPutMedia('ms1', blob, 'audio/mp3')
+    expect(col.update).toHaveBeenCalledWith('ms1', expect.any(FormData))
+  })
+})
+
+describe('dbGetMedia', () => {
+  it('returns null when record has no media_file', async () => {
+    const col = makeMockCollection({ getOne: vi.fn().mockResolvedValue({ id: 'ms1', media_file: null, collectionId: 'x', collectionName: 'milestones' }) })
+    pb.collection.mockReturnValue(col)
+    const result = await dbGetMedia('ms1')
+    expect(result).toBeNull()
   })
 })

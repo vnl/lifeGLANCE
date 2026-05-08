@@ -84,11 +84,48 @@ export async function dbDeleteChapter(id) {
   await pb.collection('chapters').delete(id)
 }
 
-// --- Media (implemented in Task 6) ---
+// --- Media (audio/video) ---
 
-export async function dbPutMedia() { throw new Error('not yet implemented') }
-export async function dbGetMedia() { throw new Error('not yet implemented') }
-export async function dbClearAllMedia() { /* no-op: deleting milestone record removes its files */ }
-export async function dbPutPhoto() { throw new Error('not yet implemented') }
-export async function dbGetPhoto() { throw new Error('not yet implemented') }
-export async function dbDeletePhoto() { throw new Error('not yet implemented') }
+export async function dbPutMedia(id, blob, mimeType) {
+  const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'bin'
+  const form = new FormData()
+  form.append('media_file', blob, `media.${ext}`)
+  form.append('media_type', mimeType.startsWith('audio') ? 'audio' : 'video')
+  await pb.collection('milestones').update(id, form)
+}
+
+export async function dbGetMedia(id) {
+  const record = await pb.collection('milestones').getOne(id)
+  if (!record.media_file) return null
+  const url = pb.files.getUrl(record, record.media_file)
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return { blob, mimeType: blob.type || 'application/octet-stream' }
+}
+
+export async function dbClearAllMedia() {
+  // no-op: PocketBase file fields are cleared when milestone record is deleted
+}
+
+// --- Photo ---
+
+export async function dbPutPhoto(id, blob, mimeType) {
+  const ext = mimeType.split('/')[1]?.split(';')[0] ?? 'jpg'
+  const form = new FormData()
+  form.append('photo', blob, `photo.${ext}`)
+  form.append('has_photo', 'true')
+  await pb.collection('milestones').update(id, form)
+}
+
+export async function dbGetPhoto(id) {
+  const record = await pb.collection('milestones').getOne(id)
+  if (!record.photo) return null
+  const url = pb.files.getUrl(record, record.photo)
+  const res = await fetch(url)
+  const blob = await res.blob()
+  return { blob, mimeType: blob.type || 'image/jpeg' }
+}
+
+export async function dbDeletePhoto(id) {
+  await pb.collection('milestones').update(id, { 'photo': '' })
+}
