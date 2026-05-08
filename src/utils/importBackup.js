@@ -18,21 +18,30 @@ export function parseBackup(jsonText) {
 
 export async function importBackup({ milestones, photos, chapters }) {
   const restored = await restoreMilestones(milestones)
-  const restoredChapters = await restoreChapters(chapters)
+
+  // Build old-backup-id → new-PB-id map by parallel index
+  const idMap = {}
+  milestones.forEach((m, i) => {
+    if (m.id && restored[i]?.id) idMap[m.id] = restored[i].id
+  })
+
+  const restoredChapters = await restoreChapters(chapters, idMap)
 
   const milestonesWithPhotos = new Set()
-  for (const m of restored) {
-    const dataUri = photos[m.id]
+  for (let i = 0; i < milestones.length; i++) {
+    const dataUri = photos[milestones[i].id]
     if (!dataUri) continue
+    const pbId = restored[i]?.id
+    if (!pbId) continue
     try {
       const [header, b64] = dataUri.split(',')
       const mimeType = header.match(/:(.*?);/)[1]
       const raw = atob(b64)
       const arr = new Uint8Array(raw.length)
-      for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
+      for (let j = 0; j < raw.length; j++) arr[j] = raw.charCodeAt(j)
       const blob = new Blob([arr], { type: mimeType })
-      await dbPutPhoto(m.id, blob, mimeType)
-      milestonesWithPhotos.add(m.id)
+      await dbPutPhoto(pbId, blob, mimeType)
+      milestonesWithPhotos.add(pbId)
     } catch { /* malformed data-URI — skip */ }
   }
 

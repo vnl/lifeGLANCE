@@ -107,9 +107,17 @@ export async function getChaptersForMilestone(milestoneId) {
 }
 
 // Replaces all chapter records with the supplied array (used by backup restore).
-export async function restoreChapters(items) {
+// idMap maps old backup milestone IDs → new PB-generated milestone IDs.
+export async function restoreChapters(items, idMap = {}) {
   const existing = await dbGetAllChapters()
   for (const chapter of existing) await dbDeleteChapter(chapter.id)
-  for (const chapter of items)    await dbPutChapter(chapter)
-  return items
+  const restored = []
+  for (const { id: _id, created_at: _ca, updated_at: _ua, ...ch } of items) {
+    const saved = await dbAddChapter({
+      ...ch,
+      milestoneIds: (ch.milestoneIds ?? []).map(oldId => idMap[oldId] ?? oldId),
+    })
+    restored.push(saved)
+  }
+  return restored
 }

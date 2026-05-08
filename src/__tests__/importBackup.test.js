@@ -45,14 +45,15 @@ describe('parseBackup', () => {
 })
 
 describe('importBackup', () => {
-  it('calls restoreMilestones and restoreChapters', async () => {
+  it('calls restoreMilestones and restoreChapters with idMap', async () => {
     restoreMilestones.mockResolvedValue([MILESTONE])
     restoreChapters.mockResolvedValue([CHAPTER])
 
     await importBackup({ milestones: [MILESTONE], photos: {}, chapters: [CHAPTER] })
 
     expect(restoreMilestones).toHaveBeenCalledWith([MILESTONE])
-    expect(restoreChapters).toHaveBeenCalledWith([CHAPTER])
+    // idMap maps old backup id → new PB id (same here since mock returns same id)
+    expect(restoreChapters).toHaveBeenCalledWith([CHAPTER], { abc123: 'abc123' })
   })
 
   it('returns { milestones, chapters }', async () => {

@@ -95,12 +95,15 @@ export async function restoreMilestones(items) {
   const existing = await dbGetAll()
   for (const m of existing) await dbDelete(m.id)
   await dbClearAllMedia()
-  const clean = items.map(({ photo_uri: _discard, ...m }) => ({
-    mainTimelineVisibility: 'inherit',   // default for backups that predate v4
-    ...m,
-    media_type: null,
-    has_photo:  false,
-  }))
-  for (const m of clean) await dbPut(m)
-  return clean
+  const restored = []
+  for (const { id: _id, photo_uri: _photo, created_at: _ca, updated_at: _ua, ...m } of items) {
+    const saved = await dbAdd({
+      mainTimelineVisibility: 'inherit',
+      ...m,
+      media_type: null,
+      has_photo:  false,
+    })
+    restored.push(saved)
+  }
+  return restored
 }
