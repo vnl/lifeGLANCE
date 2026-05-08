@@ -7,6 +7,7 @@ RUN apk add --no-cache wget unzip ca-certificates && \
     unzip /tmp/pb.zip -d /pb && \
     rm /tmp/pb.zip
 
+WORKDIR /pb
 EXPOSE 8090
 VOLUME /pb/pb_data
 
