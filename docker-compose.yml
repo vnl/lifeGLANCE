@@ -1,6 +1,25 @@
 services:
+  pocketbase:
+    image: ${LIFEGLANCE_PB_IMAGE:-ghcr.io/vnl/lifeglance-pb:latest}
+    build: ./pocketbase
+    restart: unless-stopped
+    volumes:
+      - pb_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:8090/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   lifeglance:
-    image: ghcr.io/krelltunez/lifeglance:latest
+    image: ${LIFEGLANCE_IMAGE:-ghcr.io/vnl/lifeglance:latest}
+    build: .
+    restart: unless-stopped
     ports:
       - "6868:80"
-    restart: unless-stopped
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+volumes:
+  pb_data:

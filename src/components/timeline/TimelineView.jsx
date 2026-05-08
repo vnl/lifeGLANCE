@@ -16,7 +16,8 @@ import { expandAnnualDates } from '../../utils/recurrence'
 import { loadCategories } from '../../utils/colors'
 import { getMilestoneVisibility, precomputeEndpoints } from '../../utils/visibility'
 import { addMilestone, updateMilestone, deleteMilestone, restoreMilestones, uid } from '../../data/milestones'
-import { listChapters, restoreChapters, createChapter, updateChapter, deleteChapter } from '../../data/chapters'
+import { listChapters, createChapter, updateChapter, deleteChapter } from '../../data/chapters'
+import { parseBackup, importBackup } from '../../utils/importBackup'
 import ChapterSheet from '../chapter/ChapterSheet'
 import { dbPutMedia, dbPutPhoto, dbDeletePhoto, dbGetPhoto, dbPut } from '../../data/db'
 import { parseIcs }      from '../../utils/icsParser'
@@ -999,46 +1000,10 @@ export default function TimelineView({ milestones, setMilestones }) {
     if (!file) return
     try {
       const text   = await file.text()
-      const parsed = JSON.parse(text)
-
-      // Support legacy milestone-only format (plain array) and current format
-      // ({ milestones, photos, chapters }).  Backups with an 'eras' key instead of
-      // 'chapters' are from a pre-rename dev build and are not supported.
-      if (!Array.isArray(parsed) && Array.isArray(parsed.eras) && !Array.isArray(parsed.chapters)) {
-        throw new Error('This backup was created before the Chapters rename and cannot be imported. Please regenerate the backup from the app.')
-      }
-
-      const items    = Array.isArray(parsed) ? parsed : (parsed.milestones ?? parsed)
-      const photos   = (!Array.isArray(parsed) && parsed.photos) ? parsed.photos : {}
-      const chapters = (!Array.isArray(parsed) && Array.isArray(parsed.chapters)) ? parsed.chapters : []
-
-      const restored = await restoreMilestones(items)
-      await restoreChapters(chapters)
-
-      // Re-import photo blobs into the media store
-      for (const m of restored) {
-        const dataUri = photos[m.id]
-        if (!dataUri) continue
-        try {
-          const [header, b64] = dataUri.split(',')
-          const mimeType = header.match(/:(.*?);/)[1]
-          const raw      = atob(b64)
-          const arr      = new Uint8Array(raw.length)
-          for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
-          const blob = new Blob([arr], { type: mimeType })
-          await dbPutPhoto(m.id, blob, mimeType)
-          // Mark the milestone as having a photo now that the blob is stored
-          m.has_photo = true
-        } catch { /* malformed data-URI — skip */ }
-      }
-
-      // Persist any has_photo=true updates
-      for (const m of restored) {
-        if (m.has_photo) await dbPut(m)
-      }
-
+      const parsed = parseBackup(text)
+      const { milestones: restored, chapters: restoredChapters } = await importBackup(parsed)
       setMilestones([...restored])
-      setChapters([...chapters])
+      setChapters([...restoredChapters])
       historyRef.current = { stack: [[...restored]], idx: 0 }
       setCanUndo(false)
       setCanRedo(false)

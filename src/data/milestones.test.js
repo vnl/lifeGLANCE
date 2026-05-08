@@ -1,24 +1,34 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { IDBFactory } from 'fake-indexeddb'
 
-// Reset the module registry and IndexedDB before each test so each test
-// gets a fresh in-memory database with no leftover state.
+// In-memory store shared across mock functions.
+// Use an object property so closures always see the current value
+// even after hoisting resolves the vi.mock factory.
+const _state = { store: [] }
+
+vi.mock('./db', () => ({
+  dbGetAll: vi.fn(() => Promise.resolve([..._state.store])),
+  dbAdd: vi.fn((item) => { _state.store.push(item); return Promise.resolve(item) }),
+  dbPut: vi.fn((item) => {
+    const idx = _state.store.findIndex(m => m.id === item.id)
+    if (idx >= 0) _state.store[idx] = item; else _state.store.push(item)
+    return Promise.resolve(item)
+  }),
+  dbDelete: vi.fn((id) => {
+    _state.store = _state.store.filter(m => m.id !== id)
+    return Promise.resolve()
+  }),
+  dbClearAllMedia: vi.fn(() => Promise.resolve()),
+}))
+
+import { addMilestone, updateMilestone, deleteMilestone, loadMilestones, restoreMilestones } from './milestones'
+
 beforeEach(() => {
-  global.indexedDB = new IDBFactory()
-  vi.resetModules()
+  _state.store = []
+  vi.clearAllMocks()
 })
-
-async function setup() {
-  const { initDB }                           = await import('./db')
-  const { addMilestone, updateMilestone, deleteMilestone, loadMilestones, restoreMilestones } =
-    await import('./milestones')
-  await initDB()
-  return { addMilestone, updateMilestone, deleteMilestone, loadMilestones, restoreMilestones }
-}
 
 describe('addMilestone', () => {
   it('stores a milestone and returns it with an id', async () => {
-    const { addMilestone, loadMilestones } = await setup()
     const m = await addMilestone({ title: 'First Home', date: new Date('2015-06-01') })
     expect(m.id).toBeTruthy()
     expect(m.title).toBe('First Home')
@@ -28,19 +38,16 @@ describe('addMilestone', () => {
   })
 
   it('sets direction to past for past dates', async () => {
-    const { addMilestone } = await setup()
     const m = await addMilestone({ title: 'Past', date: new Date('2000-01-01') })
     expect(m.direction).toBe('past')
   })
 
   it('sets direction to future for future dates', async () => {
-    const { addMilestone } = await setup()
     const m = await addMilestone({ title: 'Future', date: new Date('2099-01-01') })
     expect(m.direction).toBe('future')
   })
 
   it('stores multiple milestones independently', async () => {
-    const { addMilestone, loadMilestones } = await setup()
     await addMilestone({ title: 'A', date: new Date('2010-01-01') })
     await addMilestone({ title: 'B', date: new Date('2011-01-01') })
     await addMilestone({ title: 'C', date: new Date('2012-01-01') })
@@ -49,7 +56,6 @@ describe('addMilestone', () => {
   })
 
   it('does not include photo_uri in stored record', async () => {
-    const { addMilestone, loadMilestones } = await setup()
     await addMilestone({ title: 'Photo test', date: new Date('2020-01-01'), has_photo: true })
     const all = await loadMilestones()
     expect('photo_uri' in all[0]).toBe(false)
@@ -58,7 +64,6 @@ describe('addMilestone', () => {
 
 describe('updateMilestone', () => {
   it('updates an existing milestone', async () => {
-    const { addMilestone, updateMilestone, loadMilestones } = await setup()
     const m = await addMilestone({ title: 'Original', date: new Date('2015-01-01') })
     await updateMilestone(m.id, { title: 'Updated', date: new Date('2015-01-01') }, m)
     const all = await loadMilestones()
@@ -66,7 +71,6 @@ describe('updateMilestone', () => {
   })
 
   it('recalculates direction on date change', async () => {
-    const { addMilestone, updateMilestone, loadMilestones } = await setup()
     const m = await addMilestone({ title: 'Test', date: new Date('2000-01-01') })
     expect(m.direction).toBe('past')
     await updateMilestone(m.id, { title: 'Test', date: new Date('2099-01-01') }, m)
@@ -75,7 +79,6 @@ describe('updateMilestone', () => {
   })
 
   it('strips any photo_uri field passed in updates', async () => {
-    const { addMilestone, updateMilestone, loadMilestones } = await setup()
     const m = await addMilestone({ title: 'Test', date: new Date('2020-01-01') })
     await updateMilestone(m.id, { title: 'Test', date: new Date('2020-01-01'), photo_uri: 'data:...' }, m)
     const all = await loadMilestones()
@@ -85,7 +88,6 @@ describe('updateMilestone', () => {
 
 describe('deleteMilestone', () => {
   it('removes the milestone from the store', async () => {
-    const { addMilestone, deleteMilestone, loadMilestones } = await setup()
     const m = await addMilestone({ title: 'To Delete', date: new Date('2020-01-01') })
     await deleteMilestone(m.id)
     const all = await loadMilestones()
@@ -93,7 +95,6 @@ describe('deleteMilestone', () => {
   })
 
   it('does not affect other milestones', async () => {
-    const { addMilestone, deleteMilestone, loadMilestones } = await setup()
     const a = await addMilestone({ title: 'Keep', date: new Date('2020-01-01') })
     const b = await addMilestone({ title: 'Delete', date: new Date('2021-01-01') })
     await deleteMilestone(b.id)
@@ -105,7 +106,6 @@ describe('deleteMilestone', () => {
 
 describe('restoreMilestones', () => {
   it('replaces all existing milestones', async () => {
-    const { addMilestone, restoreMilestones, loadMilestones } = await setup()
     await addMilestone({ title: 'Old', date: new Date('2010-01-01') })
     const imported = [
       { id: 'x1', title: 'New A', date: '2020-01-01T00:00:00.000Z', date_precision: 'day',
@@ -121,7 +121,6 @@ describe('restoreMilestones', () => {
   })
 
   it('strips photo_uri and resets has_photo from restored items', async () => {
-    const { restoreMilestones, loadMilestones } = await setup()
     const items = [
       { id: 'y1', title: 'Photo Mile', date: '2020-01-01T00:00:00.000Z', date_precision: 'day',
         category: 'personal', color: '#888', direction: 'past', note: '',
