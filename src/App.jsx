@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react'
-import Onboarding   from './components/onboarding/Onboarding'
-import TimelineView from './components/timeline/TimelineView'
+import Onboarding      from './components/onboarding/Onboarding'
+import RestoreOrFresh  from './components/onboarding/RestoreOrFresh'
+import TimelineView    from './components/timeline/TimelineView'
 import { initDB, dbGetAll } from './data/db'
 import { registerDevtools } from './data/devtools'
 
 export default function App() {
-  const [screen,      setScreen]      = useState('loading')  // loading | onboarding | timeline | error
-  const [milestones,  setMilestones]  = useState([])
+  const [screen,       setScreen]       = useState('loading')  // loading | restore-or-fresh | onboarding | timeline | error
+  const [milestones,   setMilestones]   = useState([])
   const [portraitWarn, setPortraitWarn] = useState(
     () => window.matchMedia('(orientation: portrait) and (max-width: 1024px)').matches
   )
@@ -23,13 +24,18 @@ export default function App() {
       .then(() => { registerDevtools(); navigator.storage?.persist?.(); return dbGetAll() })
       .then((all) => {
         setMilestones(all)
-        setScreen(all.length === 0 ? 'onboarding' : 'timeline')
+        setScreen(all.length === 0 ? 'restore-or-fresh' : 'timeline')
       })
       .catch((err) => {
         console.error('DB init failed:', err)
         setScreen('error')
       })
   }, [])
+
+  function handleRestoreComplete({ milestones: imported }) {
+    setMilestones(imported)
+    setScreen('timeline')
+  }
 
   function handleOnboardingComplete(initial) {
     setMilestones(initial)
@@ -40,6 +46,11 @@ export default function App() {
     <div className="app-loading">
       <span className="cursor" style={{ width: '8px', height: '8px', borderRadius: '50%' }} />
     </div>
+  ) : screen === 'restore-or-fresh' ? (
+    <RestoreOrFresh
+      onRestoreComplete={handleRestoreComplete}
+      onStartFresh={() => setScreen('onboarding')}
+    />
   ) : screen === 'onboarding' ? (
     <Onboarding onComplete={handleOnboardingComplete} />
   ) : screen === 'error' ? (
