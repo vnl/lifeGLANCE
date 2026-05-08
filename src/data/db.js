@@ -41,13 +41,48 @@ export async function dbDelete(id) {
   await pb.collection('milestones').delete(id)
 }
 
-// --- Chapter CRUD (implemented in Task 5) ---
+// --- Chapter CRUD ---
 
-export async function dbGetAllChapters() { throw new Error('not yet implemented') }
-export async function dbGetChapter() { throw new Error('not yet implemented') }
-export async function dbAddChapter() { throw new Error('not yet implemented') }
-export async function dbPutChapter() { throw new Error('not yet implemented') }
-export async function dbDeleteChapter() { throw new Error('not yet implemented') }
+function cleanChapter(record) {
+  const cleaned = clean(record)
+  if (typeof cleaned.milestoneIds === 'string') {
+    try { cleaned.milestoneIds = JSON.parse(cleaned.milestoneIds) } catch { cleaned.milestoneIds = [] }
+  }
+  if (!Array.isArray(cleaned.milestoneIds)) cleaned.milestoneIds = []
+  return cleaned
+}
+
+export async function dbGetAllChapters() {
+  const records = await pb.collection('chapters').getFullList({ sort: 'start' })
+  return records.map(cleanChapter)
+}
+
+export async function dbGetChapter(id) {
+  const record = await pb.collection('chapters').getOne(id)
+  return cleanChapter(record)
+}
+
+export async function dbAddChapter(item) {
+  const fields = { ...item, milestoneIds: JSON.stringify(item.milestoneIds ?? []) }
+  const record = await pb.collection('chapters').create({ id: item.id, ...fields })
+  return cleanChapter(record)
+}
+
+export async function dbPutChapter(item) {
+  const fields = { ...item, milestoneIds: JSON.stringify(item.milestoneIds ?? []) }
+  try {
+    return cleanChapter(await pb.collection('chapters').update(item.id, fields))
+  } catch (e) {
+    if (e.status === 404) {
+      return cleanChapter(await pb.collection('chapters').create({ id: item.id, ...fields }))
+    }
+    throw e
+  }
+}
+
+export async function dbDeleteChapter(id) {
+  await pb.collection('chapters').delete(id)
+}
 
 // --- Media (implemented in Task 6) ---
 

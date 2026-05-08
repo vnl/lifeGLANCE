@@ -9,7 +9,7 @@ vi.mock('../data/pb.js', () => ({
 }))
 
 import pb from '../data/pb.js'
-import { initDB, dbGetAll, dbAdd, dbPut, dbDelete } from '../data/db.js'
+import { initDB, dbGetAll, dbAdd, dbPut, dbDelete, dbGetAllChapters, dbGetChapter, dbAddChapter, dbPutChapter, dbDeleteChapter } from '../data/db.js'
 
 function makeMockCollection(overrides = {}) {
   return {
@@ -98,5 +98,73 @@ describe('dbDelete', () => {
     pb.collection.mockReturnValue(col)
     await dbDelete('abc')
     expect(col.delete).toHaveBeenCalledWith('abc')
+  })
+})
+
+describe('dbGetAllChapters', () => {
+  it('returns array of clean chapter records with milestoneIds parsed from JSON', async () => {
+    const raw = [
+      { id: 'ch1', title: 'Chapter 1', milestoneIds: '["ms1","ms2"]', collectionId: 'y', collectionName: 'chapters' },
+    ]
+    const col = makeMockCollection({ getFullList: vi.fn().mockResolvedValue(raw) })
+    pb.collection.mockReturnValue(col)
+    const result = await dbGetAllChapters()
+    expect(result[0].milestoneIds).toEqual(['ms1', 'ms2'])
+    expect(result[0].collectionId).toBeUndefined()
+  })
+})
+
+describe('dbGetChapter', () => {
+  it('returns a single clean chapter record', async () => {
+    const raw = { id: 'ch1', title: 'Chapter 1', milestoneIds: '[]', collectionId: 'y', collectionName: 'chapters' }
+    const col = makeMockCollection({ getOne: vi.fn().mockResolvedValue(raw) })
+    pb.collection.mockReturnValue(col)
+    const result = await dbGetChapter('ch1')
+    expect(result.id).toBe('ch1')
+    expect(result.collectionId).toBeUndefined()
+  })
+})
+
+describe('dbAddChapter', () => {
+  it('creates a chapter and returns cleaned result', async () => {
+    const input = { id: 'ch1', title: 'New Chapter', milestoneIds: ['ms1'] }
+    const returned = { ...input, milestoneIds: JSON.stringify(['ms1']), collectionId: 'y', collectionName: 'chapters' }
+    const col = makeMockCollection({ create: vi.fn().mockResolvedValue(returned) })
+    pb.collection.mockReturnValue(col)
+    const result = await dbAddChapter(input)
+    expect(result.milestoneIds).toEqual(['ms1'])
+  })
+})
+
+describe('dbPutChapter', () => {
+  it('updates a chapter (upsert - update path)', async () => {
+    const input = { id: 'ch1', title: 'Updated', milestoneIds: ['ms1', 'ms2'] }
+    const returned = { ...input, milestoneIds: JSON.stringify(['ms1','ms2']), collectionId: 'y', collectionName: 'chapters' }
+    const col = makeMockCollection({ update: vi.fn().mockResolvedValue(returned) })
+    pb.collection.mockReturnValue(col)
+    const result = await dbPutChapter(input)
+    expect(result.milestoneIds).toEqual(['ms1', 'ms2'])
+  })
+
+  it('creates chapter when update returns 404', async () => {
+    const input = { id: 'ch1', title: 'New', milestoneIds: [] }
+    const returned = { ...input, milestoneIds: '[]', collectionId: 'y', collectionName: 'chapters' }
+    const notFound = Object.assign(new Error('not found'), { status: 404 })
+    const col = makeMockCollection({
+      update: vi.fn().mockRejectedValue(notFound),
+      create: vi.fn().mockResolvedValue(returned),
+    })
+    pb.collection.mockReturnValue(col)
+    const result = await dbPutChapter(input)
+    expect(result.id).toBe('ch1')
+  })
+})
+
+describe('dbDeleteChapter', () => {
+  it('calls delete with chapter id', async () => {
+    const col = makeMockCollection({ delete: vi.fn().mockResolvedValue(undefined) })
+    pb.collection.mockReturnValue(col)
+    await dbDeleteChapter('ch1')
+    expect(col.delete).toHaveBeenCalledWith('ch1')
   })
 })
