@@ -11,4 +11,7 @@ WORKDIR /pb
 EXPOSE 8090
 VOLUME /pb/pb_data
 
-CMD ["/pb/pocketbase", "serve", "--http=0.0.0.0:8090"]
+COPY entrypoint.sh /pb/entrypoint.sh
+RUN chmod +x /pb/entrypoint.sh
+
+CMD ["/pb/entrypoint.sh"]
