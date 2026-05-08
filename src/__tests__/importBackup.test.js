@@ -47,7 +47,7 @@ describe('parseBackup', () => {
 describe('importBackup', () => {
   it('calls restoreMilestones and restoreChapters', async () => {
     restoreMilestones.mockResolvedValue([MILESTONE])
-    restoreChapters.mockResolvedValue(undefined)
+    restoreChapters.mockResolvedValue([CHAPTER])
 
     await importBackup({ milestones: [MILESTONE], photos: {}, chapters: [CHAPTER] })
 
@@ -57,7 +57,7 @@ describe('importBackup', () => {
 
   it('returns { milestones, chapters }', async () => {
     restoreMilestones.mockResolvedValue([MILESTONE])
-    restoreChapters.mockResolvedValue(undefined)
+    restoreChapters.mockResolvedValue([CHAPTER])
 
     const result = await importBackup({ milestones: [MILESTONE], photos: {}, chapters: [CHAPTER] })
 
@@ -67,10 +67,34 @@ describe('importBackup', () => {
 
   it('does not call dbPutPhoto when no photos', async () => {
     restoreMilestones.mockResolvedValue([MILESTONE])
-    restoreChapters.mockResolvedValue(undefined)
+    restoreChapters.mockResolvedValue([])
 
     await importBackup({ milestones: [MILESTONE], photos: {}, chapters: [] })
 
+    expect(dbPutPhoto).not.toHaveBeenCalled()
+  })
+
+  it('uploads photo and calls dbPut when photo is present', async () => {
+    const photoMilestone = { ...MILESTONE }
+    restoreMilestones.mockResolvedValue([photoMilestone])
+    restoreChapters.mockResolvedValue([])
+    dbPutPhoto.mockResolvedValue(undefined)
+    dbPut.mockResolvedValue(undefined)
+
+    const dataUri = 'data:image/jpeg;base64,/9j/fake'
+    await importBackup({ milestones: [photoMilestone], photos: { abc123: dataUri }, chapters: [] })
+
+    expect(dbPutPhoto).toHaveBeenCalledWith('abc123', expect.any(Blob), 'image/jpeg')
+    expect(dbPut).toHaveBeenCalled()
+  })
+
+  it('skips malformed data-URI without throwing', async () => {
+    restoreMilestones.mockResolvedValue([MILESTONE])
+    restoreChapters.mockResolvedValue([])
+
+    await expect(
+      importBackup({ milestones: [MILESTONE], photos: { abc123: 'not-a-data-uri' }, chapters: [] })
+    ).resolves.not.toThrow()
     expect(dbPutPhoto).not.toHaveBeenCalled()
   })
 })

@@ -5,7 +5,7 @@ import { dbPutPhoto, dbPut } from '../data/db'
 export function parseBackup(jsonText) {
   const parsed = JSON.parse(jsonText)
 
-  if (!Array.isArray(parsed) && Array.isArray(parsed.eras) && !Array.isArray(parsed.chapters)) {
+  if (!Array.isArray(parsed) && 'eras' in parsed && !Array.isArray(parsed.chapters)) {
     throw new Error('This backup was created before the Chapters rename and cannot be imported. Please regenerate the backup from the app.')
   }
 
@@ -18,8 +18,9 @@ export function parseBackup(jsonText) {
 
 export async function importBackup({ milestones, photos, chapters }) {
   const restored = await restoreMilestones(milestones)
-  await restoreChapters(chapters)
+  const restoredChapters = await restoreChapters(chapters)
 
+  const milestonesWithPhotos = new Set()
   for (const m of restored) {
     const dataUri = photos[m.id]
     if (!dataUri) continue
@@ -31,13 +32,15 @@ export async function importBackup({ milestones, photos, chapters }) {
       for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i)
       const blob = new Blob([arr], { type: mimeType })
       await dbPutPhoto(m.id, blob, mimeType)
-      m.has_photo = true
+      milestonesWithPhotos.add(m.id)
     } catch { /* malformed data-URI — skip */ }
   }
 
   for (const m of restored) {
-    if (m.has_photo) await dbPut(m)
+    if (milestonesWithPhotos.has(m.id)) {
+      await dbPut({ ...m, has_photo: true })
+    }
   }
 
-  return { milestones: restored, chapters }
+  return { milestones: restored, chapters: restoredChapters }
 }
