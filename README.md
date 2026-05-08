@@ -2,10 +2,15 @@
 
 **Your life, at a glance.** A zoomable personal timeline for milestones — past and future.
 
-Built for people who want to map their life without handing their data to a cloud service. lifeGLANCE is a privacy-first progressive web app that runs entirely in the browser. There is no account, no server, no sync — your data never leaves your device.
+Built for people who want to map their life without handing their data to a cloud service. lifeGLANCE is a privacy-first progressive web app backed by a self-hosted [PocketBase](https://pocketbase.io) database. Your data stays on your own machine — no accounts, no third-party cloud, no tracking.
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Version](https://img.shields.io/badge/version-1.5.0-brightgreen.svg)](../../releases)
+
+---
+
+> **Based on the original lifeGLANCE by [@krelltunez](https://github.com/krelltunez/lifeGLANCE).**
+> All credit for the concept, design, and core application goes to him — this fork adds self-hosting infrastructure (PocketBase backend, Docker images, multi-platform support) on top of his excellent work.
 
 ---
 
@@ -13,9 +18,85 @@ Built for people who want to map their life without handing their data to a clou
 
 ---
 
-## Install
+## Self-hosting with Docker
 
-Use the hosted version at [lifeglance.app](https://lifeglance.app), or self-host with Docker (see below).
+lifeGLANCE ships as two Docker images published to GitHub Container Registry (GHCR):
+
+| Image | Purpose |
+|---|---|
+| `ghcr.io/vnl/lifeglance:latest` | The React frontend served via nginx |
+| `ghcr.io/vnl/lifeglance-pb:latest` | PocketBase backend (database + API) |
+
+**Supported platforms:** `linux/amd64` · `linux/arm64` · `linux/arm/v7`
+
+Works on: Mac (Apple Silicon & Intel), Windows, Raspberry Pi, Synology NAS, and any other Docker-capable host.
+
+### Quick start
+
+Create a `docker-compose.yml` anywhere on your machine:
+
+```yaml
+services:
+  pocketbase:
+    image: ghcr.io/vnl/lifeglance-pb:latest
+    restart: unless-stopped
+    volumes:
+      # pb_data holds your entire database (milestones, chapters, media).
+      # To use a folder on your host instead of a Docker volume, replace with:
+      #   - /path/to/your/folder:/pb/pb_data
+      - pb_data:/pb/pb_data
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "/dev/null", "http://localhost:8090/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  lifeglance:
+    image: ghcr.io/vnl/lifeglance:latest
+    restart: unless-stopped
+    ports:
+      # Change the left-hand port to serve on a different host port, e.g. "8080:80"
+      - "6868:80"
+    depends_on:
+      pocketbase:
+        condition: service_healthy
+
+volumes:
+  pb_data:
+```
+
+Then run:
+
+```bash
+docker compose up -d
+```
+
+Open `http://localhost:6868` (or whichever port you chose). PocketBase is provisioned automatically on first run — no manual setup needed.
+
+### Persistent data
+
+Your timeline data lives in the `pb_data` volume. To back it up, stop the stack and copy the volume contents, or use *Settings → save backup* inside the app to export a portable JSON file.
+
+To update to the latest version:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+---
+
+## Restoring from a backup
+
+On first launch with an empty database, lifeGLANCE shows a restore screen. If you have a JSON backup from a previous installation:
+
+1. Click **restore from backup** and select your `.json` file.
+2. The app previews what was found (milestone and chapter counts) before importing.
+3. Click **import everything** to restore. Photos are re-linked automatically if they were included in the backup.
+
+If you are starting fresh, click **start fresh** to go straight to onboarding.
+
+> Audio and video attachments are not included in JSON backups — re-attach them manually after restoring if needed.
 
 ---
 
@@ -30,7 +111,7 @@ Use the hosted version at [lifeglance.app](https://lifeglance.app), or self-host
 
 **Milestones**
 - Title, date (day / month / year precision), category, note, and URL
-- Photo, audio, and video attachments stored as local blobs — no base64 bloat
+- Photo, audio, and video attachments
 - Annual recurrence with configurable end year
 - Inline delete confirmation, undo / redo history
 
@@ -78,23 +159,19 @@ Use the hosted version at [lifeglance.app](https://lifeglance.app), or self-host
 
 ## Storage
 
-All data is stored locally in your browser using IndexedDB. Nothing is sent to a server.
+Data is stored in PocketBase, which runs as a companion container alongside the app. The PocketBase data directory (`pb_data`) is mounted as a Docker volume so it persists across container restarts and updates.
 
 | Store | Contents |
 |---|---|
-| IndexedDB `milestones` | Milestone records (text fields, flags) |
-| IndexedDB `media` | Audio / video blobs, keyed by milestone ID |
-| `localStorage` | Settings and preferences only (a few KB) |
+| PocketBase `milestones` collection | Milestone records (text fields, photo, media attachments) |
+| PocketBase `chapters` collection | Chapter records with milestone membership |
+| `localStorage` | Settings and preferences only (a few KB, browser-local) |
 
-Media blobs are fetched lazily — only when you open a milestone detail or click play — so startup time stays fast regardless of how many attachments you have.
-
-**Backup:** use *Settings → save backup* to export a JSON file of your milestone records. **Audio and video attachments are not included in the JSON backup — re-attach them after restoring if needed.**
-
-**Storage limits** vary by browser. Chrome and Firefox allow multiple GB. Safari on iOS is more restrictive and may evict data for origins not visited for 7+ days unless the app is installed to the home screen. The current usage and available quota are shown in the Help modal (`?`).
+**Backup:** use *Settings → save backup* to export a JSON file of your milestone records. Audio and video attachments are not included — re-attach them after restoring if needed.
 
 ---
 
-## Running locally
+## Running locally (development)
 
 Requires Node 20+.
 
@@ -103,7 +180,7 @@ npm install
 npm run dev
 ```
 
-The dev server starts at `http://localhost:5173`.
+The dev server starts at `http://localhost:5173`. You will also need a running PocketBase instance — use `docker compose up pocketbase` to start just the database.
 
 ---
 
@@ -116,31 +193,27 @@ npm run preview # serve the production build locally
 
 ---
 
-## Docker
-
-```bash
-docker build -t lifeglance .
-docker run -p 8080:80 lifeglance
-```
-
-The image builds with Node 20 Alpine and serves the static output via nginx.
-
----
-
 ## Tech
 
 | | |
 |---|---|
 | Framework | React 18 + Vite |
 | PWA | vite-plugin-pwa (Workbox) |
-| Storage | IndexedDB (milestones + media), localStorage (settings) |
+| Backend | PocketBase 0.22 |
+| Storage | PocketBase (milestones + media), localStorage (settings) |
 | Dates | date-fns |
 | Font | Courier Prime (Google Fonts, cached offline) |
 | Audio | Web Audio API — synthesised, no samples |
-| Deployment | Docker + nginx |
+| Deployment | Docker + nginx + PocketBase |
 
 ---
 
 ## Privacy
 
-lifeGLANCE has no backend, no analytics, no accounts, and no network requests beyond loading the app itself and fetching the Courier Prime font (cached after first load). Your timeline data is yours alone.
+lifeGLANCE has no third-party analytics, no accounts, and no external network requests beyond loading the app and fetching the Courier Prime font (cached after first load). All timeline data is stored in your own PocketBase instance on your own infrastructure.
+
+---
+
+## Credits
+
+lifeGLANCE was created by [@krelltunez](https://github.com/krelltunez). The original project lives at [github.com/krelltunez/lifeGLANCE](https://github.com/krelltunez/lifeGLANCE) — all credit for the concept, design, and application goes to him. This fork adds Docker-based self-hosting with PocketBase persistence and multi-platform image publishing.
