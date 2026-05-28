@@ -26,16 +26,17 @@ function assignChapterRows(chapters) {
   })
 }
 
-// Human-readable duration string, e.g. "4y 2mo" or "8mo".
+// Human-readable elapsed duration, e.g. "3 yrs, 6 mo" or "8 mo".
+// For ongoing chapters (endIso is null) uses today as the end.
 function chapterSpan(startIso, endIso) {
-  const s = new Date(startIso), e = new Date(endIso)
+  const s = new Date(startIso), e = endIso ? new Date(endIso) : new Date()
   const totalMonths = (e.getFullYear() - s.getFullYear()) * 12 + (e.getMonth() - s.getMonth())
   const yrs = Math.floor(totalMonths / 12)
   const mos = totalMonths % 12
-  if (yrs > 0 && mos > 0) return `${yrs}y ${mos}mo`
-  if (yrs > 0)             return `${yrs}y`
-  if (mos > 0)             return `${mos}mo`
-  return '< 1mo'
+  if (yrs > 0 && mos > 0) return `${yrs} yr${yrs !== 1 ? 's' : ''}, ${mos} mo`
+  if (yrs > 0)             return `${yrs} yr${yrs !== 1 ? 's' : ''}`
+  if (mos > 0)             return `${mos} mo`
+  return '< 1 mo'
 }
 
 // Word-wrap title to at most 2 lines given a max-chars-per-line limit.
@@ -357,8 +358,12 @@ const Timeline = forwardRef(function Timeline(
               const labelFontPx  = remPx * 0.45
               const labelCharW   = labelFontPx * 0.60
               const labelMaxCh   = Math.floor((barW - 14) / labelCharW)
+              const durText      = chapterSpan(chapter.start, chapter.end)
+              const fullLabel    = `${chapter.title} · ${durText}`
               const labelText    = labelMaxCh > 2
-                ? (chapter.title.length <= labelMaxCh ? chapter.title : chapter.title.slice(0, labelMaxCh - 1) + '…')
+                ? (fullLabel.length <= labelMaxCh
+                    ? fullLabel
+                    : (chapter.title.length <= labelMaxCh ? chapter.title : chapter.title.slice(0, labelMaxCh - 1) + '…'))
                 : ''
 
               const startYear = new Date(chapter.start).getFullYear()
