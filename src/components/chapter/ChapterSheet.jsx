@@ -56,6 +56,7 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
   const [checkedIds,     setCheckedIds]     = useState(() => new Set(existing?.milestoneIds ?? []))
   const [confirmDelete,  setConfirmDelete]  = useState(false)
   const [dateError,      setDateError]      = useState(null)
+  const [saveError,      setSaveError]      = useState(null)
   const [busy,           setBusy]           = useState(false)
 
   // Build Date objects from parts; null when year is not yet filled in.
@@ -121,6 +122,7 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
   async function handleSubmit(e) {
     e.preventDefault()
     if (!validateDates() || !canSave) return
+    setSaveError(null)
     setBusy(true)
     try {
       await onSave(
@@ -136,6 +138,9 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
         existing,
       )
       onClose()
+    } catch (err) {
+      const detail = err?.response?.data ? JSON.stringify(err.response.data) : (err?.message || String(err))
+      setSaveError(`Save failed: ${detail}`)
     } finally {
       setBusy(false)
     }
@@ -418,6 +423,12 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
               </button>
             </div>
           )
+        )}
+
+        {saveError && (
+          <div className="sheet-field">
+            <p style={{ color: '#e85d75', fontSize: '0.8rem', margin: 0 }}>{saveError}</p>
+          </div>
         )}
 
         {/* Actions */}

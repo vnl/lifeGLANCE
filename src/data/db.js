@@ -63,13 +63,13 @@ export async function dbGetChapter(id) {
 }
 
 export async function dbAddChapter(item) {
-  const fields = { ...item, milestoneIds: JSON.stringify(item.milestoneIds ?? []) }
+  const fields = { ...item, milestoneIds: item.milestoneIds ?? [] }
   const record = await pb.collection('chapters').create({ id: item.id, ...fields })
   return cleanChapter(record)
 }
 
 export async function dbPutChapter(item) {
-  const fields = { ...item, milestoneIds: JSON.stringify(item.milestoneIds ?? []) }
+  const fields = { ...item, milestoneIds: item.milestoneIds ?? [] }
   try {
     return cleanChapter(await pb.collection('chapters').update(item.id, fields))
   } catch (e) {

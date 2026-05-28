@@ -734,35 +734,40 @@ export default function TimelineView({ milestones, setMilestones }) {
     const startIso = new Date(data.start).toISOString()
     const endIso   = new Date(data.end).toISOString()
 
-    if (existing) {
-      const updated = await updateChapter(
-        existing.id,
-        {
+    try {
+      if (existing) {
+        const updated = await updateChapter(
+          existing.id,
+          {
+            title:                  data.title,
+            start:                  startIso,
+            end:                    endIso,
+            color:                  data.color,
+            description:            data.description,
+            defaultMemberVisibility: data.defaultMemberVisibility,
+            milestoneIds:           data.milestoneIds,
+          },
+          existing,
+        )
+        setChapters(prev => prev.map(c => c.id === existing.id ? updated : c))
+      } else {
+        const chapter = await createChapter({
           title:                  data.title,
-          start:                  startIso,
-          end:                    endIso,
+          start:                  data.start,
+          end:                    data.end,
           color:                  data.color,
           description:            data.description,
           defaultMemberVisibility: data.defaultMemberVisibility,
-          milestoneIds:           data.milestoneIds,
-        },
-        existing,
-      )
-      setChapters(prev => prev.map(c => c.id === existing.id ? updated : c))
-    } else {
-      const chapter = await createChapter({
-        title:                  data.title,
-        start:                  data.start,
-        end:                    data.end,
-        color:                  data.color,
-        description:            data.description,
-        defaultMemberVisibility: data.defaultMemberVisibility,
-      })
-      // Set member milestones if any were selected
-      const final = data.milestoneIds.length > 0
-        ? await updateChapter(chapter.id, { milestoneIds: data.milestoneIds }, chapter)
-        : chapter
-      setChapters(prev => [...prev, final])
+        })
+        // Set member milestones if any were selected
+        const final = data.milestoneIds.length > 0
+          ? await updateChapter(chapter.id, { milestoneIds: data.milestoneIds }, chapter)
+          : chapter
+        setChapters(prev => [...prev, final])
+      }
+    } catch (err) {
+      console.error('Chapter save failed:', err)
+      throw err
     }
   }
 
