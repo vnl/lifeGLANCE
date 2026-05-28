@@ -658,6 +658,10 @@ export default function TimelineView({ milestones, setMilestones }) {
             )
           }
           setChapters(updated)
+          if (drilledChapter) {
+            const refreshed = updated.find(c => c.id === drilledChapter.id)
+            if (refreshed) setDrilledChapter(refreshed)
+          }
         }
         audio.playChime()
       }
@@ -750,6 +754,7 @@ export default function TimelineView({ milestones, setMilestones }) {
           existing,
         )
         setChapters(prev => prev.map(c => c.id === existing.id ? updated : c))
+        if (drilledChapter?.id === existing.id) setDrilledChapter(updated)
       } else {
         const chapter = await createChapter({
           title:                  data.title,
@@ -786,8 +791,8 @@ export default function TimelineView({ milestones, setMilestones }) {
   // ── Drill-in (Phase 5) ───────────────────────────────────────────────────────
   function handleChapterClick(chapter) {
     audio.init()
-    // Don't re-enter if already drilled — prevents overwriting the saved pre-drill state.
-    if (drilledChapter) return
+    // Single-click while drilled in exits back to main view instead of re-entering.
+    if (drilledChapter) { exitDrillIn(); return }
 
     // Save current view state in a ref so exitDrillIn always reads the latest value
     // regardless of which render's closure calls it.
