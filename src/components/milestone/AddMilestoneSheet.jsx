@@ -104,9 +104,9 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
   React.useEffect(() => {
     if (existing?.date) {
       const d = new Date(existing.date)
-      setMonth(String(d.getMonth() + 1))
-      setDay(String(d.getDate()))
-      setYear(String(d.getFullYear()))
+      setMonth(String(d.getUTCMonth() + 1))
+      setDay(String(d.getUTCDate()))
+      setYear(String(d.getUTCFullYear()))
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 

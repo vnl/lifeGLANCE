@@ -785,6 +785,7 @@ export default function TimelineView({ milestones, setMilestones }) {
 
   // ── Drill-in (Phase 5) ───────────────────────────────────────────────────────
   function handleChapterClick(chapter) {
+    audio.init()
     // Don't re-enter if already drilled — prevents overwriting the saved pre-drill state.
     if (drilledChapter) return
 
@@ -1351,6 +1352,7 @@ export default function TimelineView({ milestones, setMilestones }) {
           onDelete={handleDelete}
           onDeleteSeries={handleDeleteSeries}
           birthday={birthday}
+          categories={categories}
         />
       )}
       {searchOpen && (
