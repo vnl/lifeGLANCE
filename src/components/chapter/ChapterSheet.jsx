@@ -58,6 +58,7 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
   const [dateError,      setDateError]      = useState(null)
   const [saveError,      setSaveError]      = useState(null)
   const [busy,           setBusy]           = useState(false)
+  const [ongoing,        setOngoing]        = useState(isEdit && existing?.end == null)
 
   // Build Date objects from parts; null when year is not yet filled in.
   const startDate = startYear.length >= 4
@@ -71,12 +72,13 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
 
   // Milestones whose dates fall within [startDate, endDate]
   const inRange = useMemo(() => {
-    if (!startDate || !endDate) return []
-    if (startDate >= endDate) return []
+    if (!startDate || (!endDate && !ongoing)) return []
+    const effectiveEnd = ongoing ? new Date() : endDate
+    if (startDate >= effectiveEnd) return []
     return milestones
-      .filter(m => { const d = new Date(m.date); return d >= startDate && d <= endDate })
+      .filter(m => { const d = new Date(m.date); return d >= startDate && d <= effectiveEnd })
       .sort((a, b) => new Date(a.date) - new Date(b.date))
-  }, [startIso, endIso, milestones])
+  }, [startIso, endIso, ongoing, milestones])
 
   const inRangeIds = useMemo(() => new Set(inRange.map(m => m.id)), [inRange])
 
@@ -109,7 +111,8 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
   function clearDateError() { setDateError(null) }
 
   function validateDates() {
-    if (!startIso || !endIso) { setDateError('both dates are required'); return false }
+    if (!startIso) { setDateError('start date is required'); return false }
+    if (!ongoing && !endIso) { setDateError('end date is required, or mark as ongoing'); return false }
     if (startPrecision === 'day' && startYear.length >= 4) {
       const maxDay = new Date(Number(startYear), Number(startMonth), 0).getDate()
       if (Number(startDay) < 1 || Number(startDay) > maxDay) {
@@ -117,21 +120,21 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
         return false
       }
     }
-    if (endPrecision === 'day' && endYear.length >= 4) {
+    if (!ongoing && endPrecision === 'day' && endYear.length >= 4) {
       const maxDay = new Date(Number(endYear), Number(endMonth), 0).getDate()
       if (Number(endDay) < 1 || Number(endDay) > maxDay) {
         setDateError(`end day must be between 1 and ${maxDay} for the selected month`)
         return false
       }
     }
-    if (new Date(startIso) >= new Date(endIso)) {
+    if (!ongoing && new Date(startIso) >= new Date(endIso)) {
       setDateError('end date must be after start date')
       return false
     }
     return true
   }
 
-  const canSave = title.trim() && startIso && endIso && !busy
+  const canSave = title.trim() && startIso && (ongoing || endIso) && !busy
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -143,7 +146,7 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
         {
           title:                  title.trim(),
           start:                  startIso,
-          end:                    endIso,
+          end:                    ongoing ? null : endIso,
           color,
           description:            desc.trim(),
           defaultMemberVisibility: defVis,
@@ -249,55 +252,72 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
             ))}
           </div>
 
-          {/* End date */}
-          <label className="field-label" style={{ marginTop: '0.75rem' }}>to</label>
-          <div className="date-grid">
-            {endPrecision !== 'year' && (
-              <div>
-                <label className="field-label">month</label>
-                <select
-                  className="input input-sm"
-                  value={endMonth}
-                  onChange={e => { setEndMonth(e.target.value); clearDateError() }}
-                  style={{ cursor: 'pointer' }}
-                >
-                  {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
-                </select>
+          {/* Ongoing toggle */}
+          <label className="settings-toggle-row" style={{ marginTop: '0.75rem' }}>
+            <span className="field-label" style={{ marginBottom: 0 }}>
+              ongoing (no end date)
+            </span>
+            <input
+              type="checkbox"
+              className="settings-toggle"
+              checked={ongoing}
+              onChange={e => { setOngoing(e.target.checked); clearDateError() }}
+            />
+          </label>
+
+          {!ongoing && (
+            <>
+              {/* End date */}
+              <label className="field-label" style={{ marginTop: '0.75rem' }}>to</label>
+              <div className="date-grid">
+                {endPrecision !== 'year' && (
+                  <div>
+                    <label className="field-label">month</label>
+                    <select
+                      className="input input-sm"
+                      value={endMonth}
+                      onChange={e => { setEndMonth(e.target.value); clearDateError() }}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      {MONTHS.map(m => <option key={m.v} value={m.v}>{m.l}</option>)}
+                    </select>
+                  </div>
+                )}
+                {endPrecision === 'day' && (
+                  <div>
+                    <label className="field-label">day</label>
+                    <input
+                      className="input input-sm"
+                      type="number"
+                      placeholder="15"
+                      value={endDay}
+                      onChange={e => { setEndDay(e.target.value); clearDateError() }}
+                      min="1" max="31"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="field-label">year</label>
+                  <input
+                    className="input input-sm"
+                    type="number"
+                    placeholder="2024"
+                    value={endYear}
+                    onChange={e => { setEndYear(e.target.value); clearDateError() }}
+                    min="1900" max="2100"
+                  />
+                </div>
               </div>
-            )}
-            {endPrecision === 'day' && (
-              <div>
-                <label className="field-label">day</label>
-                <input
-                  className="input input-sm"
-                  type="number"
-                  placeholder="15"
-                  value={endDay}
-                  onChange={e => { setEndDay(e.target.value); clearDateError() }}
-                  min="1" max="31"
-                />
+              <div className="precision-tabs">
+                {['day', 'month', 'year'].map(p => (
+                  <button key={p} type="button"
+                    className={`precision-tab ${endPrecision === p ? 'active' : ''}`}
+                    onClick={() => setEndPrecision(p)}
+                  >{p}</button>
+                ))}
               </div>
-            )}
-            <div>
-              <label className="field-label">year</label>
-              <input
-                className="input input-sm"
-                type="number"
-                placeholder="2024"
-                value={endYear}
-                onChange={e => { setEndYear(e.target.value); clearDateError() }}
-                min="1900" max="2100"
-              />
-            </div>
-          </div>
-          <div className="precision-tabs">
-            {['day', 'month', 'year'].map(p => (
-              <button key={p} type="button"
-                className={`precision-tab ${endPrecision === p ? 'active' : ''}`}
-                onClick={() => setEndPrecision(p)}
-              >{p}</button>
-            ))}
-          </div>
+            </>
+          )}
 
           {dateError && <div className="chapter-date-error">{dateError}</div>}
         </div>
@@ -356,7 +376,7 @@ export default function ChapterSheet({ onSave, onClose, onDelete, existing, mile
               <span className="chapter-member-count"> — {[...checkedIds].filter(id => displayMilestones.some(m => m.id === id)).length} selected</span>
             )}
           </label>
-          {!startIso || !endIso ? (
+          {!startIso || (!endIso && !ongoing) ? (
             <div className="chapter-members-empty">set a date range above to see milestones</div>
           ) : displayMilestones.length === 0 ? (
             <div className="chapter-members-empty">no milestones in this date range</div>
