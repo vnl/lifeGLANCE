@@ -50,7 +50,7 @@ export default function MinimapBar({ milestones, chapters = [], panMs, onPanDire
     const rowEnds = []
     return sorted.map(ch => {
       const s = new Date(ch.start).getTime()
-      const e = new Date(ch.end).getTime()
+      const e = ch.end ? new Date(ch.end).getTime() : todayMs
       let row = rowEnds.findIndex(end => end <= s)
       if (row === -1) row = rowEnds.length
       if (row >= MAX_ROWS) row = MAX_ROWS - 1  // clamp overflow into last row
@@ -98,7 +98,8 @@ export default function MinimapBar({ milestones, chapters = [], panMs, onPanDire
         {/* Chapter bands — below the axis, stacked by row */}
         {chapterRows.map(ch => {
           const x1 = Math.max(0, msToX(new Date(ch.start).getTime()))
-          const x2 = Math.min(w, msToX(new Date(ch.end).getTime()))
+          const effectiveEndMs = ch.end ? new Date(ch.end).getTime() : todayMs
+          const x2 = Math.min(w, msToX(effectiveEndMs))
           if (x2 <= x1) return null
           const y = BAND_TOP + ch._row * (BAND_H + BAND_GAP)
           return (
