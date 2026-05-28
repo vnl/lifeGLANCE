@@ -19,7 +19,7 @@ export function buildChapter({
     id:                     uid(),
     title:                  title.trim(),
     start:                  start instanceof Date ? start.toISOString() : new Date(start).toISOString(),
-    end:                    end instanceof Date   ? end.toISOString()   : new Date(end).toISOString(),
+    end:                    end == null ? null : (end instanceof Date ? end.toISOString() : new Date(end).toISOString()),
     color,
     description,
     defaultMemberVisibility,
