@@ -18,7 +18,7 @@ function assignChapterRows(chapters) {
   const rowEnds = [] // rowEnds[i] = end-time of the last chapter placed in row i
   return sorted.map(chapter => {
     const s = new Date(chapter.start).getTime()
-    const e = new Date(chapter.end).getTime()
+    const e = chapter.end ? new Date(chapter.end).getTime() : Date.now()
     let row = rowEnds.findIndex(end => end <= s)
     if (row === -1) { row = rowEnds.length; rowEnds.push(e) }
     else rowEnds[row] = e
@@ -338,16 +338,20 @@ const Timeline = forwardRef(function Timeline(
               stroke="rgba(232,224,208,0.08)" strokeWidth={1} />
 
             {chaptersWithRows.map(chapter => {
+              const isOngoing     = !chapter.end
               const chapterStartX = dateToX(new Date(chapter.start).getTime(), startMs, endMs, w)
-              const chapterEndX   = dateToX(new Date(chapter.end).getTime(),   startMs, endMs, w)
+              const effectiveEndMs = isOngoing ? Date.now() : new Date(chapter.end).getTime()
+              const chapterEndX   = dateToX(effectiveEndMs, startMs, endMs, w)
 
               // Skip chapters that are entirely off-screen
               if (chapterEndX < -10 || chapterStartX > w + 10) return null
 
               // Clamp visible portion to viewport
-              const x1   = Math.max(0, chapterStartX)
-              const x2   = Math.min(w, chapterEndX)
-              const barW = x2 - x1
+              const x1       = Math.max(0, chapterStartX)
+              // Ongoing bars extend 80 px past today for the fade-out effect
+              const fadeEndX = isOngoing ? Math.min(w, todayX + 80) : chapterEndX
+              const x2       = Math.min(w, fadeEndX)
+              const barW     = x2 - x1
               if (barW < 1) return null
 
               const barY = msAxisY + CHAPTER_BAND_PAD + chapter._row * (CHAPTER_ROW_H + CHAPTER_ROW_GAP)
@@ -367,7 +371,7 @@ const Timeline = forwardRef(function Timeline(
                 : ''
 
               const startYear = new Date(chapter.start).getFullYear()
-              const endYear   = new Date(chapter.end).getFullYear()
+              const endYear   = chapter.end ? new Date(chapter.end).getFullYear() : null
 
               return (
                 <g key={chapter.id}
@@ -387,9 +391,28 @@ const Timeline = forwardRef(function Timeline(
                     onChapterDoubleClick?.(chapter)
                   }}
                 >
+                  {isOngoing && (() => {
+                    const gradX2 = Math.min(w, todayX + 80)
+                    const frac = gradX2 > x1 ? Math.max(0, Math.min(1, (todayX - x1) / (gradX2 - x1))) : 0
+                    return (
+                      <defs>
+                        <linearGradient
+                          id={`ch-ongoing-${chapter.id}`}
+                          gradientUnits="userSpaceOnUse"
+                          x1={x1} x2={gradX2}
+                          y1="0" y2="0"
+                        >
+                          <stop offset="0"               stopColor={chapter.color} stopOpacity="0.18" />
+                          <stop offset={frac.toFixed(4)} stopColor={chapter.color} stopOpacity="0.18" />
+                          <stop offset="1"               stopColor={chapter.color} stopOpacity="0"   />
+                        </linearGradient>
+                      </defs>
+                    )
+                  })()}
                   {/* Bar body */}
                   <rect x={x1} y={barY} width={barW} height={barH}
-                    fill={chapter.color} fillOpacity={0.18}
+                    fill={isOngoing ? `url(#ch-ongoing-${chapter.id})` : chapter.color}
+                    fillOpacity={isOngoing ? 1 : 0.18}
                     stroke={chapter.color} strokeOpacity={0.32} strokeWidth={0.5}
                     rx={2} />
 
@@ -423,7 +446,7 @@ const Timeline = forwardRef(function Timeline(
                       opacity={0.60}
                     >{startYear}</text>
                   )}
-                  {daysPerPx < 0.8 && barW >= w * 0.45 && chapterEndX <= w - 4 && (
+                  {daysPerPx < 0.8 && barW >= w * 0.45 && endYear !== null && chapterEndX <= w - 4 && (
                     <text
                       x={chapterEndX - 4}
                       y={barY + barH - 2}
@@ -826,7 +849,9 @@ const Timeline = forwardRef(function Timeline(
             {chapterTip.chapter.title}
           </div>
           <div style={{ fontSize: '0.55rem', color: 'rgba(232,224,208,0.55)', marginTop: 2 }}>
-            {chapterSpan(chapterTip.chapter.start, chapterTip.chapter.end)}
+            {chapterTip.chapter.end
+              ? chapterSpan(chapterTip.chapter.start, chapterTip.chapter.end)
+              : `${chapterSpan(chapterTip.chapter.start, null)} — ongoing`}
           </div>
         </div>
       )}
