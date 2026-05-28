@@ -56,8 +56,7 @@ export async function loadMilestones() {
 
 export async function addMilestone(data) {
   const m = buildMilestone(data)
-  await dbAdd(m)
-  return m
+  return await dbAdd(m)
 }
 
 export async function updateMilestone(id, updates, existing) {

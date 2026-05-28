@@ -32,8 +32,7 @@ export function buildChapter({
 
 export async function createChapter(data) {
   const chapter = buildChapter(data)
-  await dbAddChapter(chapter)
-  return chapter
+  return await dbAddChapter(chapter)
 }
 
 export async function getChapter(id) {

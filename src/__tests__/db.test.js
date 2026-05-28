@@ -56,7 +56,8 @@ describe('dbAdd', () => {
     pb.collection.mockReturnValue(col)
     const result = await dbAdd(input)
     expect(result).toEqual(input)
-    expect(col.create).toHaveBeenCalledWith(expect.objectContaining({ id: 'abc', title: 'New' }))
+    expect(col.create).toHaveBeenCalledWith(expect.objectContaining({ title: 'New' }))
+    expect(col.create).not.toHaveBeenCalledWith(expect.objectContaining({ id: expect.anything() }))
   })
 })
 

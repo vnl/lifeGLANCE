@@ -20,8 +20,8 @@ export async function dbGetAll() {
 }
 
 export async function dbAdd(item) {
-  const { photo, media_file, ...fields } = item
-  const record = await pb.collection('milestones').create({ id: item.id, ...fields })
+  const { photo, media_file, id: _id, ...fields } = item
+  const record = await pb.collection('milestones').create(fields)
   return clean(record)
 }
 
@@ -63,8 +63,9 @@ export async function dbGetChapter(id) {
 }
 
 export async function dbAddChapter(item) {
-  const fields = { ...item, milestoneIds: item.milestoneIds ?? [] }
-  const record = await pb.collection('chapters').create({ id: item.id, ...fields })
+  const { id: _id, ...rest } = item
+  const fields = { ...rest, milestoneIds: rest.milestoneIds ?? [] }
+  const record = await pb.collection('chapters').create(fields)
   return cleanChapter(record)
 }
 
