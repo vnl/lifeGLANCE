@@ -586,7 +586,7 @@ export default function TimelineView({ milestones, setMilestones }) {
     // photoFile / photoRemoved / mediaFile / mediaRemoved are transfer-only fields
     // from the form — strip them before passing to the data layer and handle blob
     // persistence here.
-    const { mediaFile, mediaRemoved, photoFile, photoRemoved, chapterIds, ...milestoneData } = data
+    const { mediaFile, mediaRemoved, photoFile, photoRemoved, chapterIds, closeChapterIds, ...milestoneData } = data
     const newMediaType = mediaFile
       ? (mediaFile.type.startsWith('video/') ? 'video' : 'audio')
       : null
@@ -646,9 +646,9 @@ export default function TimelineView({ milestones, setMilestones }) {
         setMilestones(newMs)
         setNewlyAddedId(m.id)
         // Add to any chapters the user selected in the form.
-        if (chapterIds?.length) {
+        if (chapterIds?.length || closeChapterIds?.length) {
           const updated = [...chapters]
-          for (const chId of chapterIds) {
+          for (const chId of (chapterIds ?? [])) {
             const idx = updated.findIndex(c => c.id === chId)
             if (idx === -1 || updated[idx].milestoneIds.includes(m.id)) continue
             updated[idx] = await updateChapter(
@@ -656,6 +656,11 @@ export default function TimelineView({ milestones, setMilestones }) {
               { milestoneIds: [...updated[idx].milestoneIds, m.id] },
               updated[idx],
             )
+          }
+          for (const chId of (closeChapterIds ?? [])) {
+            const idx = updated.findIndex(c => c.id === chId)
+            if (idx === -1) continue
+            updated[idx] = await updateChapter(chId, { end: m.date }, updated[idx])
           }
           setChapters(updated)
           if (drilledChapter) {
@@ -736,7 +741,7 @@ export default function TimelineView({ milestones, setMilestones }) {
 
   async function handleChapterSave(data, existing) {
     const startIso = new Date(data.start).toISOString()
-    const endIso   = new Date(data.end).toISOString()
+    const endIso   = data.end ? new Date(data.end).toISOString() : null
 
     try {
       if (existing) {
@@ -806,7 +811,7 @@ export default function TimelineView({ milestones, setMilestones }) {
 
     // Compute zoom-to-fit: center on the chapter with 15% padding each side.
     const startMs         = new Date(chapter.start).getTime()
-    const endMs           = new Date(chapter.end).getTime()
+    const endMs           = chapter.end ? new Date(chapter.end).getTime() : Date.now()
     const chapterCenterMs = (startMs + endMs) / 2
     const halfMs          = (endMs - startMs) / 2 * 1.15
     const halfYears       = halfMs / (365.25 * 24 * 3600 * 1000)
@@ -1066,7 +1071,9 @@ export default function TimelineView({ milestones, setMilestones }) {
               <button className="drill-breadcrumb-close" onClick={() => exitDrillIn()} title="exit chapter view">✕</button>
             </div>
             <div className="drill-breadcrumb-meta">
-              <span>{fmtChapterDate(drilledChapter.start)} – {fmtChapterDate(drilledChapter.end)}</span>
+              <span>
+                {fmtChapterDate(drilledChapter.start)} – {drilledChapter.end ? fmtChapterDate(drilledChapter.end) : 'ongoing'}
+              </span>
               <span className="drill-breadcrumb-dot">·</span>
               <span>{drilledChapter.milestoneIds.length} member{drilledChapter.milestoneIds.length !== 1 ? 's' : ''}</span>
               {drilledChapter.description && <>
