@@ -36,7 +36,7 @@
     "fields": [
       {"name": "title",                   "type": "text",   "required": true,  "options": {"min": null, "max": 80,  "pattern": ""}},
       {"name": "start",                   "type": "text",   "required": true,  "options": {"min": null, "max": null,"pattern": ""}},
-      {"name": "end",                     "type": "text",   "required": true,  "options": {"min": null, "max": null,"pattern": ""}},
+      {"name": "end",                     "type": "text",   "required": false, "options": {"min": null, "max": null,"pattern": ""}},
       {"name": "color",                   "type": "text",   "required": false, "options": {"min": null, "max": null,"pattern": ""}},
       {"name": "description",             "type": "text",   "required": false, "options": {"min": null, "max": 300, "pattern": ""}},
       {"name": "defaultMemberVisibility", "type": "select", "required": false, "options": {"maxSelect": 1, "values": ["shown","hidden"]}},
