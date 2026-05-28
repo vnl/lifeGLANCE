@@ -45,10 +45,14 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
     if (isEdit || year.length < 4) return []
     const date = buildDateFromParts(month, year, precision, day)
     if (!date) return []
-    return chapters.filter(ch => date >= new Date(ch.start) && date <= new Date(ch.end))
+    return chapters.filter(ch => {
+      const effectiveEnd = ch.end ? new Date(ch.end) : new Date()
+      return date >= new Date(ch.start) && date <= effectiveEnd
+    })
   }, [isEdit, month, day, year, precision, chapters])
 
   const [selectedChapterIds, setSelectedChapterIds] = React.useState(() => new Set())
+  const [closeChapterIds, setCloseChapterIds] = React.useState(() => new Set())
 
   // When the overlapping set changes, reset selection: check only the drilled chapter
   // (if it overlaps), leave everything else unchecked.
@@ -62,8 +66,21 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
     )
   }, [overlappingChapters, drilledChapter, isEdit])
 
+  React.useEffect(() => {
+    if (isEdit) return
+    setCloseChapterIds(new Set())
+  }, [overlappingChapters, isEdit])
+
   function toggleChapter(id) {
     setSelectedChapterIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  function toggleClose(id) {
+    setCloseChapterIds(prev => {
       const next = new Set(prev)
       next.has(id) ? next.delete(id) : next.add(id)
       return next
@@ -173,6 +190,7 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         url: url.trim(),
         mainTimelineVisibility: visibility,
         chapterIds: isEdit ? undefined : [...selectedChapterIds],
+        closeChapterIds: isEdit ? undefined : [...closeChapterIds],
         recurrence: (!isEdit && recurrence) ? 'annual' : (existing?.recurrence ?? null),
         recurrence_id: existing?.recurrence_id ?? null,
         recurrenceEndYear: (!isEdit && recurrence && year.length >= 4)
@@ -526,6 +544,30 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
                   />
                   <span className="chapter-member-dot" style={{ background: ch.color }} />
                   <span className="chapter-member-title">{ch.title}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Close ongoing chapters at this date — create mode only */}
+        {!isEdit && overlappingChapters.filter(ch => !ch.end).length > 0 && (
+          <div className="sheet-field">
+            <label className="field-label">close ongoing chapter at this date</label>
+            <div className="chapter-members-list">
+              {overlappingChapters.filter(ch => !ch.end).map(ch => (
+                <label key={`close-${ch.id}`} className="chapter-member-row">
+                  <input
+                    type="checkbox"
+                    className="chapter-member-check"
+                    checked={closeChapterIds.has(ch.id)}
+                    onChange={() => toggleClose(ch.id)}
+                  />
+                  <span className="chapter-member-dot" style={{ background: ch.color }} />
+                  <span className="chapter-member-title">{ch.title}</span>
+                  <span style={{ fontSize: '0.65rem', color: 'rgba(232,224,208,0.4)', marginLeft: 'auto' }}>
+                    ongoing
+                  </span>
                 </label>
               ))}
             </div>
