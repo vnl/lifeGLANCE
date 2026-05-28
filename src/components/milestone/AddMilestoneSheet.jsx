@@ -122,7 +122,11 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
     }
   }, [recurrence, year])
 
-  const canSave = title.trim() && year.length >= 4
+  const maxDay  = precision === 'day' && year.length >= 4
+    ? new Date(Number(year), Number(month), 0).getDate()
+    : 31
+  const canSave = title.trim() && year.length >= 4 &&
+    (precision !== 'day' || (Number(day) >= 1 && Number(day) <= maxDay))
 
   // Determine what to show in the photo section
   const previewUrl    = photoFile ? photoObjectUrl : (!photoRemoved ? existingPhotoUrl : null)
