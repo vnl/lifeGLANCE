@@ -28,8 +28,9 @@ export default function RestoreOrFresh({ onRestoreComplete, onStartFresh }) {
     try {
       const result = await importBackup(preview)
       onRestoreComplete(result)
-    } catch {
-      setError('Import failed — please try again.')
+    } catch (err) {
+      const detail = err?.response?.data ? JSON.stringify(err.response.data) : (err?.message || String(err))
+      setError(`Import failed: ${detail}`)
       setPhase('idle')
       setPreview(null)
     }
