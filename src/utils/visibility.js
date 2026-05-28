@@ -27,7 +27,7 @@ export function precomputeEndpoints(chapters) {
 
   for (const chapter of chapters) {
     const startDay = chapter.start.slice(0, 10)
-    const endDay   = chapter.end.slice(0, 10)
+    const endDay   = chapter.end ? chapter.end.slice(0, 10) : null
 
     for (const milestoneId of chapter.milestoneIds) {
       // Endpoint status requires both date match AND membership — checked by
