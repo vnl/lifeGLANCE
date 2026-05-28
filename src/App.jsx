@@ -3,7 +3,6 @@ import Onboarding      from './components/onboarding/Onboarding'
 import RestoreOrFresh  from './components/onboarding/RestoreOrFresh'
 import TimelineView    from './components/timeline/TimelineView'
 import { initDB, dbGetAll } from './data/db'
-import { registerDevtools } from './data/devtools'
 
 export default function App() {
   const [screen,       setScreen]       = useState('loading')  // loading | restore-or-fresh | onboarding | timeline | error
@@ -21,7 +20,11 @@ export default function App() {
 
   useEffect(() => {
     initDB()
-      .then(() => { registerDevtools(); navigator.storage?.persist?.(); return dbGetAll() })
+      .then(() => {
+        if (import.meta.env.DEV) import('./data/devtools').then(m => m.registerDevtools())
+        navigator.storage?.persist?.()
+        return dbGetAll()
+      })
       .then((all) => {
         setMilestones(all)
         setScreen(all.length === 0 ? 'restore-or-fresh' : 'timeline')
