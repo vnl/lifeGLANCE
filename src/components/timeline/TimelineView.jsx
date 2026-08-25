@@ -586,7 +586,7 @@ export default function TimelineView({ milestones, setMilestones }) {
     // photoFile / photoRemoved / mediaFile / mediaRemoved are transfer-only fields
     // from the form — strip them before passing to the data layer and handle blob
     // persistence here.
-    const { mediaFile, mediaRemoved, photoFile, photoRemoved, chapterIds, closeChapterIds, ...milestoneData } = data
+    const { mediaFile, mediaRemoved, photoFile, photoRemoved, chapterIds, closeChapterIds, editSeries, ...milestoneData } = data
     const newMediaType = mediaFile
       ? (mediaFile.type.startsWith('video/') ? 'video' : 'audio')
       : null
@@ -599,13 +599,43 @@ export default function TimelineView({ milestones, setMilestones }) {
         const hasPhoto  = photoFile    ? true
                         : photoRemoved ? false
                         : (existing.has_photo ?? false)
-        const updated = await updateMilestone(existing.id, { ...milestoneData, media_type: mediaType, has_photo: hasPhoto }, existing)
-        if (mediaFile)    await dbPutMedia(updated.id, mediaFile, mediaFile.type)
-        if (photoFile)    await dbPutPhoto(updated.id, photoFile, photoFile.type)
-        if (photoRemoved) await dbDeletePhoto(updated.id)
-        const newMs = milestones.map(m => m.id === existing.id ? updated : m)
-        pushHistory(newMs)
-        setMilestones(newMs)
+
+        if (editSeries && existing.recurrence_id) {
+          const series = milestones.filter(m => m.recurrence_id === existing.recurrence_id)
+          const updatedById = new Map()
+
+          for (const m of series) {
+            const updated = await updateMilestone(
+              m.id,
+              {
+                ...milestoneData,
+                date: m.date,
+                recurrence_id: existing.recurrence_id,
+                media_type: m.id === existing.id ? mediaType : m.media_type,
+                has_photo: m.id === existing.id ? hasPhoto : m.has_photo,
+              },
+              m,
+            )
+            updatedById.set(m.id, updated)
+          }
+
+          if (mediaFile)    await dbPutMedia(existing.id, mediaFile, mediaFile.type)
+          if (photoFile)    await dbPutPhoto(existing.id, photoFile, photoFile.type)
+          if (photoRemoved) await dbDeletePhoto(existing.id)
+
+          const newMs = milestones.map(m => updatedById.get(m.id) ?? m)
+          pushHistory(newMs)
+          setMilestones(newMs)
+        } else {
+          const updated = await updateMilestone(existing.id, { ...milestoneData, media_type: mediaType, has_photo: hasPhoto }, existing)
+          if (mediaFile)    await dbPutMedia(updated.id, mediaFile, mediaFile.type)
+          if (photoFile)    await dbPutPhoto(updated.id, photoFile, photoFile.type)
+          if (photoRemoved) await dbDeletePhoto(updated.id)
+          const newMs = milestones.map(m => m.id === existing.id ? updated : m)
+          pushHistory(newMs)
+          setMilestones(newMs)
+        }
+
         audio.playEditSave()
       } else if (milestoneData.recurrence === 'annual') {
         // Generate one instance per year from base year to chosen end year (max +99)
