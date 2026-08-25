@@ -49,6 +49,8 @@ jobs:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7
+          provenance: false
+          sbom: false
           tags: ${{ steps.app-meta.outputs.tags }}
           labels: ${{ steps.app-meta.outputs.labels }}
           cache-from: type=gha,scope=app
@@ -70,6 +72,8 @@ jobs:
           context: ./pocketbase
           push: true
           platforms: linux/amd64,linux/arm64,linux/arm/v7
+          provenance: false
+          sbom: false
           tags: ${{ steps.pb-meta.outputs.tags }}
           labels: ${{ steps.pb-meta.outputs.labels }}
           cache-from: type=gha,scope=pb
