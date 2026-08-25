@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest'
-import { applyRecurFilter } from './timeline'
+import {
+  applyRecurFilter,
+  computePinchZoom,
+  PINCH_MIN_HALF_MS,
+  PINCH_MAX_HALF_MS,
+} from './timeline'
 
 // Helper to build a minimal milestone-like object
 function ms(id, dateStr, recurrence_id = null) {
@@ -88,3 +93,125 @@ describe('applyRecurFilter', () => {
     expect(result).toEqual(plain)
   })
 })
+
+describe('computePinchZoom', () => {
+  const timeUnderMid = (panMs, halfMs, midX, width, fraction = 0.5) =>
+    panMs + (halfMs * 2) * (midX / width - fraction)
+
+  const NOCLAMP = { minHalfMs: 0, maxHalfMs: Infinity }
+  const base = {
+    startHalfMs: 1000,
+    startPanMs: 0,
+    width: 1000,
+    startMidX: 500,
+    midX: 500,
+    ...NOCLAMP,
+  }
+
+  it('halves the span when fingers spread 2×', () => {
+    const result = computePinchZoom({ ...base, distRatio: 2 })
+    expect(result.halfMs).toBe(500)
+    expect(result.panMs).toBe(0)
+  })
+
+  it('doubles the span when finger distance halves', () => {
+    const result = computePinchZoom({ ...base, distRatio: 0.5 })
+    expect(result.halfMs).toBe(2000)
+  })
+
+  it('clamps zoom-in to the minimum half-span', () => {
+    const result = computePinchZoom({
+      startHalfMs: PINCH_MIN_HALF_MS,
+      startPanMs: 0,
+      width: 1000,
+      startMidX: 500,
+      midX: 500,
+      distRatio: 1000,
+    })
+    expect(result.halfMs).toBe(PINCH_MIN_HALF_MS)
+  })
+
+  it('clamps zoom-out to the maximum half-span', () => {
+    const result = computePinchZoom({
+      startHalfMs: PINCH_MAX_HALF_MS,
+      startPanMs: 0,
+      width: 1000,
+      startMidX: 500,
+      midX: 500,
+      distRatio: 0.001,
+    })
+    expect(result.halfMs).toBe(PINCH_MAX_HALF_MS)
+  })
+
+  it('keeps the timestamp beneath an off-centre pinch fixed', () => {
+    const args = {
+      ...base,
+      startMidX: 750,
+      midX: 750,
+      distRatio: 2,
+    }
+
+    const before = timeUnderMid(
+      args.startPanMs,
+      args.startHalfMs,
+      args.startMidX,
+      args.width,
+    )
+
+    const result = computePinchZoom(args)
+
+    const after = timeUnderMid(
+      result.panMs,
+      result.halfMs,
+      args.midX,
+      args.width,
+    )
+
+    expect(after).toBeCloseTo(before, 3)
+  })
+
+  it('pans when the two-finger midpoint moves without changing distance', () => {
+    const result = computePinchZoom({
+      ...base,
+      midX: 600,
+      distRatio: 1,
+    })
+
+    expect(result.halfMs).toBe(1000)
+    expect(result.panMs).not.toBe(0)
+  })
+
+  it('honours the past-view anchor when preserving the midpoint', () => {
+    const args = {
+      startHalfMs: 1000,
+      startPanMs: 12345,
+      viewMode: 'past',
+      width: 1000,
+      startMidX: 300,
+      midX: 300,
+      distRatio: 1.5,
+      ...NOCLAMP,
+    }
+
+    const before = timeUnderMid(
+      args.startPanMs,
+      args.startHalfMs,
+      args.startMidX,
+      args.width,
+      0.88,
+    )
+
+    const result = computePinchZoom(args)
+
+    const after = timeUnderMid(
+      result.panMs,
+      result.halfMs,
+      args.midX,
+      args.width,
+      0.88,
+    )
+
+    expect(after).toBeCloseTo(before, 3)
+  })
+})
+

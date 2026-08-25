@@ -2,7 +2,7 @@ import React, {
   useRef, useState, useEffect, useCallback,
   useImperativeHandle, forwardRef,
 } from 'react'
-import { dateToX, getTimeRangeForView, getTickMarks, assignLanes, getMsPerPx, ZOOM_LEVELS } from '../../utils/timeline'
+import { dateToX, getTimeRangeForView, getTickMarks, assignLanes, getMsPerPx, computePinchZoom } from '../../utils/timeline'
 import { relativeLabel, formatDateDisplay, ageAtDate } from '../../utils/dates'
 import { dbGetMedia } from '../../data/db'
 
@@ -98,7 +98,13 @@ const Timeline = forwardRef(function Timeline(
   const panMsRef        = useRef(panMs)
   const animRef         = useRef(null)
   const drag            = useRef({ active: false, startX: 0, startPan: 0 })
-  const pinch           = useRef({ active: false, startDistance: 0, startZoom: zoom })
+  const pinch           = useRef({
+    active: false,
+    startDist: 1,
+    startMidX: 0,
+    startHalfMs: 0,
+    startPan: 0,
+  })
   // Distinguishes single-click (drill-in) from double-click (edit) on chapter ribbons.
   const chapterClickTimer = useRef(null)
 
@@ -267,58 +273,91 @@ const Timeline = forwardRef(function Timeline(
   const endDrag = useCallback(() => { drag.current.active = false }, [])
   const touchId = useRef(null)
 
-  const touchDistance = useCallback((touches) => {
-    if (touches.length < 2) return 0
+  const touchGeometry = useCallback((touches) => {
+    const rect = wrapRef.current?.getBoundingClientRect()
+    const left = rect ? rect.left : 0
     const [a, b] = touches
-    return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY)
+
+    return {
+      dist: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY),
+      midX: (a.clientX + b.clientX) / 2 - left,
+    }
   }, [])
+
+  const startPinch = useCallback((touches) => {
+    if (animRef.current) cancelAnimationFrame(animRef.current)
+    drag.current.active = false
+
+    const { dist, midX } = touchGeometry(touches)
+
+    pinch.current = {
+      active: true,
+      startDist: dist || 1,
+      startMidX: midX,
+      startHalfMs: (msPerPx * w) / 2,
+      startPan: panMsRef.current,
+    }
+  }, [msPerPx, touchGeometry, w])
+
+  const movePinch = useCallback((touches) => {
+    if (!pinch.current.active || !onPinchZoom) return
+
+    const { dist, midX } = touchGeometry(touches)
+
+    const { halfMs, panMs: newPan } = computePinchZoom({
+      startHalfMs: pinch.current.startHalfMs,
+      startPanMs: pinch.current.startPan,
+      viewMode,
+      width: w,
+      startMidX: pinch.current.startMidX,
+      midX,
+      distRatio: dist / pinch.current.startDist,
+    })
+
+    panMsRef.current = newPan
+    onPinchZoom(halfMs, newPan)
+  }, [onPinchZoom, touchGeometry, viewMode, w])
 
   return (
     <div
       ref={wrapRef}
       className="timeline-svg-wrap"
-      style={{ flex: 1 }}
+      style={{ flex: 1, touchAction: 'none' }}
       onMouseDown={e => startDrag(e.clientX)}
       onMouseMove={e => moveDrag(e.clientX)}
       onMouseUp={endDrag}
       onMouseLeave={endDrag}
       onTouchStart={e => {
         if (e.touches.length >= 2) {
-          endDrag()
-          pinch.current = {
-            active: true,
-            startDistance: touchDistance([...e.touches]),
-            startZoom: zoom,
-          }
-          return
+          startPinch(e.touches)
+        } else {
+          const t = e.touches[0]
+          touchId.current = t.identifier
+          startDrag(t.clientX)
         }
-
-        const t = e.touches[0]
-        touchId.current = t.identifier
-        startDrag(t.clientX)
       }}
       onTouchMove={e => {
         if (pinch.current.active && e.touches.length >= 2) {
-          const distance = touchDistance([...e.touches])
-          const ratio = distance / pinch.current.startDistance
-          const idx = ZOOM_LEVELS.indexOf(pinch.current.startZoom)
-
-          if (ratio > 1.18 && idx < ZOOM_LEVELS.length - 1) {
-            onPinchZoom?.(ZOOM_LEVELS[idx + 1])
-            pinch.current.active = false
-          } else if (ratio < 0.82 && idx > 0) {
-            onPinchZoom?.(ZOOM_LEVELS[idx - 1])
-            pinch.current.active = false
-          }
-          return
+          movePinch(e.touches)
+        } else if (!pinch.current.active) {
+          const t = [...e.touches].find(x => x.identifier === touchId.current)
+          if (t) moveDrag(t.clientX)
         }
-
-        const t = [...e.touches].find(x => x.identifier === touchId.current)
-        if (t) moveDrag(t.clientX)
       }}
       onTouchEnd={e => {
-        if (e.touches.length < 2) pinch.current.active = false
-        if (e.touches.length === 0) endDrag()
+        if (pinch.current.active) {
+          if (e.touches.length < 2) {
+            pinch.current.active = false
+
+            if (e.touches.length === 1) {
+              const t = e.touches[0]
+              touchId.current = t.identifier
+              startDrag(t.clientX)
+            }
+          }
+        } else {
+          endDrag()
+        }
       }}
     >
       <svg

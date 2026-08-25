@@ -43,6 +43,43 @@ export function getMsPerPx(zoom, width, customHalfMs = 0) {
   return (half * 2) / width
 }
 
+
+// Pinch-to-zoom bounds, expressed as half-span in milliseconds.
+// Roughly 1 month visible at maximum zoom-in and 300 years at maximum zoom-out.
+export const PINCH_MIN_HALF_MS = 14 * 24 * 3600 * 1000
+export const PINCH_MAX_HALF_MS = 150 * 365.25 * 24 * 3600 * 1000
+
+// Compute continuous pinch zoom from the gesture's starting view and current
+// finger geometry. Keeps the timestamp beneath the pinch midpoint anchored,
+// allowing two-finger pan and zoom in the same gesture.
+export function computePinchZoom({
+  startHalfMs,
+  startPanMs,
+  viewMode = 'all',
+  width,
+  startMidX,
+  midX,
+  distRatio,
+  minHalfMs = PINCH_MIN_HALF_MS,
+  maxHalfMs = PINCH_MAX_HALF_MS,
+}) {
+  const fraction = VIEW_ANCHOR[viewMode] ?? 0.5
+  const half = Math.max(
+    minHalfMs,
+    Math.min(maxHalfMs, startHalfMs / distRatio),
+  )
+
+  const kStart = startMidX / width - fraction
+  const kCur = midX / width - fraction
+  const panMs =
+    startPanMs +
+    startHalfMs * 2 * kStart -
+    half * 2 * kCur
+
+  return { halfMs: half, panMs }
+}
+
+
 // Pick the best tick-mark visual style for a given span
 function autoStyle(startMs, endMs) {
   const spanYears = (endMs - startMs) / (365.25 * 24 * 3600 * 1000)
