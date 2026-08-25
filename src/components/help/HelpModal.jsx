@@ -1,5 +1,5 @@
 import React, { useMemo, useState, useEffect } from 'react'
-import { version as VERSION } from '../../../package.json'
+const VERSION = __APP_VERSION__
 
 const SHORTCUTS = [
   { keys: ['←', '→'],        desc: 'cycle past / future milestones'   },

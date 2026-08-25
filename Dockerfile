@@ -1,5 +1,7 @@
 # Stage 1: Build (always runs on native host platform — avoids QEMU emulation for npm)
 FROM --platform=$BUILDPLATFORM node:20-alpine AS builder
+ARG LIFEGLANCE_VERSION
+ENV LIFEGLANCE_VERSION=$LIFEGLANCE_VERSION
 WORKDIR /app
 COPY package*.json .npmrc ./
 RUN npm ci
