@@ -2,8 +2,8 @@ import {
   differenceInYears,
   differenceInMonths,
   differenceInDays,
+  differenceInCalendarDays,
   format,
-  isPast,
 } from 'date-fns'
 
 // Returns the age (in whole years) at a given date, or null if birthday not set
@@ -27,27 +27,30 @@ function toLocalNoon(dateStr) {
 export function relativeLabel(dateStr, precision = 'day') {
   const date = toLocalNoon(dateStr)
   const now  = new Date()
-  const past = isPast(date) && date < now
+
+  // Use calendar-day distance so "today", "yesterday", and "tomorrow"
+  // are correct regardless of the current time of day.
+  const dayDiff = differenceInCalendarDays(date, now)
+  if (dayDiff === 0) return 'today'
+
+  const past   = dayDiff < 0
+  const days   = Math.abs(dayDiff)
+  const from   = past ? date : now
+  const to     = past ? now : date
+  const years  = differenceInYears(to, from)
+  const months = differenceInMonths(to, from) % 12
 
   if (past) {
-    const years  = differenceInYears(now, date)
-    const months = differenceInMonths(now, date) % 12
-    const days   = differenceInDays(now, date)
     if (years > 0 && months > 0) return `${years} yr${years !== 1 ? 's' : ''}, ${months} mo ago`
     if (years > 0)               return `${years} yr${years !== 1 ? 's' : ''} ago`
     if (days > 30)               return `${Math.floor(days / 30)} mo ago`
-    if (days > 0)                return `${days} day${days !== 1 ? 's' : ''} ago`
-    return 'today'
-  } else {
-    const years  = differenceInYears(date, now)
-    const months = differenceInMonths(date, now) % 12
-    const days   = differenceInDays(date, now)
-    if (years > 0 && months > 0) return `in ${years} yr${years !== 1 ? 's' : ''}, ${months} mo`
-    if (years > 0)               return `in ${years} yr${years !== 1 ? 's' : ''}`
-    if (days > 30)               return `in ${Math.floor(days / 30)} mo`
-    if (days >= 0)               return `in ${days} day${days !== 1 ? 's' : ''}`
-    return 'today'
+    return `${days} day${days !== 1 ? 's' : ''} ago`
   }
+
+  if (years > 0 && months > 0) return `in ${years} yr${years !== 1 ? 's' : ''}, ${months} mo`
+  if (years > 0)               return `in ${years} yr${years !== 1 ? 's' : ''}`
+  if (days > 30)               return `in ${Math.floor(days / 30)} mo`
+  return `in ${days} day${days !== 1 ? 's' : ''}`
 }
 
 export function formatDateDisplay(dateStr, precision = 'day') {

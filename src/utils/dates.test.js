@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { buildDateFromParts } from './dates'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { buildDateFromParts, relativeLabel } from './dates'
 
 describe('buildDateFromParts', () => {
   describe('day precision', () => {
@@ -48,5 +48,36 @@ describe('buildDateFromParts', () => {
       const d = buildDateFromParts('12', '2050', 'year', '31')
       expect(d).toEqual(new Date(Date.UTC(2050, 0, 1)))
     })
+  })
+})
+
+
+describe('relativeLabel', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('returns today before local noon', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 25, 8, 0, 0))
+    expect(relativeLabel('2026-08-25T00:00:00.000Z')).toBe('today')
+  })
+
+  it('returns today after local noon', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 25, 20, 0, 0))
+    expect(relativeLabel('2026-08-25T00:00:00.000Z')).toBe('today')
+  })
+
+  it('classifies yesterday correctly before noon', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 25, 8, 0, 0))
+    expect(relativeLabel('2026-08-24T00:00:00.000Z')).toBe('1 day ago')
+  })
+
+  it('classifies tomorrow correctly late at night', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 7, 25, 23, 0, 0))
+    expect(relativeLabel('2026-08-26T00:00:00.000Z')).toBe('in 1 day')
   })
 })
