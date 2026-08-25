@@ -1255,6 +1255,7 @@ export default function TimelineView({ milestones, setMilestones }) {
             milestones={drillMilestones}
             chapters={drillChapters}
             zoom={zoom}
+            onPinchZoom={setZoom}
             textSize={textSize}
             customHalfMs={customHalfMs}
             highlightedIds={drillHighlighted}

@@ -2,7 +2,7 @@ import React, {
   useRef, useState, useEffect, useCallback,
   useImperativeHandle, forwardRef,
 } from 'react'
-import { dateToX, getTimeRangeForView, getTickMarks, assignLanes, getMsPerPx } from '../../utils/timeline'
+import { dateToX, getTimeRangeForView, getTickMarks, assignLanes, getMsPerPx, ZOOM_LEVELS } from '../../utils/timeline'
 import { relativeLabel, formatDateDisplay, ageAtDate } from '../../utils/dates'
 import { dbGetMedia } from '../../data/db'
 
@@ -65,7 +65,7 @@ function wrapTitle(text, maxChars) {
 }
 
 const Timeline = forwardRef(function Timeline(
-  { milestones, chapters = [], zoom, textSize = 'normal', onMilestoneClick, onChapterClick, onChapterDoubleClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick, clustering = true, birthday = '', newlyAddedId = null, ultraCompact = false },
+  { milestones, chapters = [], zoom, onPinchZoom, textSize = 'normal', onMilestoneClick, onChapterClick, onChapterDoubleClick, customHalfMs = 0, highlightedIds, panMs, onPanMs, viewMode = 'all', onClusterClick, clustering = true, birthday = '', newlyAddedId = null, ultraCompact = false },
   ref
 ) {
   const remPx = REM_PX[textSize] || 22
@@ -98,6 +98,7 @@ const Timeline = forwardRef(function Timeline(
   const panMsRef        = useRef(panMs)
   const animRef         = useRef(null)
   const drag            = useRef({ active: false, startX: 0, startPan: 0 })
+  const pinch           = useRef({ active: false, startDistance: 0, startZoom: zoom })
   // Distinguishes single-click (drill-in) from double-click (edit) on chapter ribbons.
   const chapterClickTimer = useRef(null)
 
@@ -266,6 +267,12 @@ const Timeline = forwardRef(function Timeline(
   const endDrag = useCallback(() => { drag.current.active = false }, [])
   const touchId = useRef(null)
 
+  const touchDistance = useCallback((touches) => {
+    if (touches.length < 2) return 0
+    const [a, b] = touches
+    return Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY)
+  }, [])
+
   return (
     <div
       ref={wrapRef}
@@ -276,15 +283,43 @@ const Timeline = forwardRef(function Timeline(
       onMouseUp={endDrag}
       onMouseLeave={endDrag}
       onTouchStart={e => {
+        if (e.touches.length >= 2) {
+          endDrag()
+          pinch.current = {
+            active: true,
+            startDistance: touchDistance([...e.touches]),
+            startZoom: zoom,
+          }
+          return
+        }
+
         const t = e.touches[0]
         touchId.current = t.identifier
         startDrag(t.clientX)
       }}
       onTouchMove={e => {
+        if (pinch.current.active && e.touches.length >= 2) {
+          const distance = touchDistance([...e.touches])
+          const ratio = distance / pinch.current.startDistance
+          const idx = ZOOM_LEVELS.indexOf(pinch.current.startZoom)
+
+          if (ratio > 1.18 && idx < ZOOM_LEVELS.length - 1) {
+            onPinchZoom?.(ZOOM_LEVELS[idx + 1])
+            pinch.current.active = false
+          } else if (ratio < 0.82 && idx > 0) {
+            onPinchZoom?.(ZOOM_LEVELS[idx - 1])
+            pinch.current.active = false
+          }
+          return
+        }
+
         const t = [...e.touches].find(x => x.identifier === touchId.current)
         if (t) moveDrag(t.clientX)
       }}
-      onTouchEnd={endDrag}
+      onTouchEnd={e => {
+        if (e.touches.length < 2) pinch.current.active = false
+        if (e.touches.length === 0) endDrag()
+      }}
     >
       <svg
         width={w} height={h}
