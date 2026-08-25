@@ -19,6 +19,11 @@ export async function dbGetAll() {
   return records.map(clean)
 }
 
+export async function dbGet(id) {
+  const record = await pb.collection('milestones').getOne(id)
+  return clean(record)
+}
+
 export async function dbAdd(item) {
   const { photo, media_file, id: _id, ...fields } = item
   const record = await pb.collection('milestones').create(fields)
