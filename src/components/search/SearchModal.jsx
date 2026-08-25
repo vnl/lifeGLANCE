@@ -62,7 +62,12 @@ export default function SearchModal({ milestones, chapters = [], onSelect, onClo
               >
                 <div className="search-result-dot" style={{ background: m.color }} />
                 <div className="search-result-body">
-                  <span className="search-result-title">{m.title}</span>
+                  <span className="search-result-title">
+                    {m.title}
+                    {m.mainTimelineVisibility === 'hidden' && (
+                      <span className="search-result-hidden"> · hidden</span>
+                    )}
+                  </span>
                   <span className="search-result-meta">
                     {formatDateDisplay(m.date, m.date_precision)}
                     <span className="search-result-sep">·</span>

@@ -34,6 +34,7 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
   const [mediaObjectUrl, setMediaObjectUrl] = useState(null) // transient preview URL
   const [recurrence,    setRecurrence]    = useState(false)
   const [recEndYear,    setRecEndYear]    = useState('')
+  const [editSeries,    setEditSeries]    = useState(false)
   const [visibility,    setVisibility]    = useState(existing?.mainTimelineVisibility ?? 'inherit')
   const [busy,          setBusy]          = useState(false)
   const photoRef = useRef(null)
@@ -193,6 +194,7 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         closeChapterIds: isEdit ? undefined : [...closeChapterIds],
         recurrence: (!isEdit && recurrence) ? 'annual' : (existing?.recurrence ?? null),
         recurrence_id: existing?.recurrence_id ?? null,
+        editSeries: isEdit && existing?.recurrence_id ? editSeries : false,
         recurrenceEndYear: (!isEdit && recurrence && year.length >= 4)
           ? (recEndYear ? Number(recEndYear) : Math.max(Number(year), new Date().getFullYear()) + 3)
           : undefined,
@@ -469,7 +471,23 @@ export default function AddMilestoneSheet({ onSave, onClose, existing, categorie
         )}
         {isEdit && existing?.recurrence === 'annual' && (
           <div className="sheet-field">
-            <div className="detail-recurrence-warn">↻ repeats annually — editing this instance only</div>
+            <label className="field-label">recurring edit scope</label>
+            <div className="vis-toggle-row">
+              <button
+                type="button"
+                className={`vis-tab${!editSeries ? ' active' : ''}`}
+                onClick={() => setEditSeries(false)}
+              >
+                this instance
+              </button>
+              <button
+                type="button"
+                className={`vis-tab${editSeries ? ' active' : ''}`}
+                onClick={() => setEditSeries(true)}
+              >
+                whole series
+              </button>
+            </div>
           </div>
         )}
 
